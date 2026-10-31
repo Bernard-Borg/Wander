@@ -188,3 +188,7 @@
 @media (max-width: 480px) { .wander-field { gap: 12px; } .wander-dialog { max-height: calc(100dvh - 24px); } }
 @media (prefers-reduced-motion: reduce) { .wander-button:hover { transform: none; } }
 @media (forced-colors: active) { .wander-checkbox { appearance: auto; } }
+
+/* HUD labels and controls should never select text during play or touch gestures. */
+.game-hud { display: contents; }
+.game-hud, .game-hud * { -webkit-user-select: none; user-select: none; }

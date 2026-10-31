@@ -64,20 +64,9 @@ export const useSimulatorStore = defineStore("simulator", () => {
                 VEHICLES[vehicles.selectedId] ?? DEFAULT_VEHICLE,
             );
             instance.value = simulator;
-            simulator.setPerformanceEnabled(state.showPerformance);
             simulator.setGraphics(settings.shadowsEnabled, settings.renderScale);
-            state.performanceHistory = [];
             simulator.onVehicleUpdate((data) => {
                 if (operation === revision) Object.assign(state.vehicle, data);
-            });
-            simulator.onPerformanceUpdate((data) => {
-                if (operation !== revision) return;
-                state.performanceHistory.push(data);
-                while (
-                    state.performanceHistory.length &&
-                    state.performanceHistory[0].timeMs < data.timeMs - 12000
-                )
-                    state.performanceHistory.shift();
             });
             simulator.onSpeedUpdate((speed) => {
                 if (operation === revision) state.speed = speed;
@@ -241,12 +230,6 @@ export const useSimulatorStore = defineStore("simulator", () => {
         else pauseReasons.value.delete(reason);
         active()?.setPaused(isPaused.value);
     };
-    /** Toggles HUD performance graphs and renderer instrumentation together. */
-    const togglePerformance = (): void => {
-        state.showPerformance = !state.showPerformance;
-        if (state.showPerformance) state.performanceHistory = [];
-        active()?.setPerformanceEnabled(state.showPerformance);
-    };
 
     return {
         instance,
@@ -270,6 +253,5 @@ export const useSimulatorStore = defineStore("simulator", () => {
         resetLocation,
         setCreativeMode,
         setPauseReason,
-        togglePerformance,
     };
 });

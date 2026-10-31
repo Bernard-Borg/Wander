@@ -21,7 +21,7 @@ free-flight mode for exploring from above.
 - **Audio:** vehicle-specific engine sounds, ignition, collisions, horn and radio,
   with separate engine, music and effects volume settings.
 - **HUD:** instruments, compass, coordinates, street labels, coordinate/street
-  search and teleportation, FPS and optional performance graphs.
+  search and teleportation, an FPS counter.
 - **Touch controls:** driving, horn and camera controls for mobile devices.
 
 Map accuracy and detail depend on the source data. Terrain heightmaps cannot
@@ -85,7 +85,7 @@ off; pressing the accelerator starts the ignition automatically.
 | ?                    | Open controls help                                                             |
 
 Use the on-screen buttons for car selection, radio, street labels, location reset,
-city switching and performance diagnostics. Search accepts street names or
+city switching. Search accepts street names or
 latitude/longitude within map bounds. The in-game help dialog is the reference
 for controls; mobile devices also expose touch controls.
 
@@ -101,7 +101,7 @@ for controls; mobile devices also expose touch controls.
 | Mouse wheel       | Adjust flight speed |
 | C                 | Return to driving   |
 
-### Settings and performance
+### Settings
 
 Settings includes shadows, render resolution, audio channel volumes and mute.
 The HUD page independently hides the speedometer/instruments, compass/coordinates
@@ -118,8 +118,7 @@ Currently terrain meshes are generated at load time, and the TIFF loader reads
 the complete elevation band; preprocessing/streaming is not implemented. Use
 fallback terrain or adjust `meshSpacing` when detailed maps load too slowly.
 
-The performance panel includes FPS, frame/CPU timings, draw calls and scene counts.
-See [driving and diagnostics](docs/DRIVING.md) for more detail.
+The HUD retains a compact FPS counter.
 
 ## Maps and configuration
 

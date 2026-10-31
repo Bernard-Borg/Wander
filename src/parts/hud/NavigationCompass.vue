@@ -64,16 +64,16 @@ const heading = computed(() => String(Math.round(headingValue.value) % 360).padS
     transform: translateX(-50%);
     width: min(480px, 62vw);
     z-index: 10;
-    color: #e4eee9;
+    color: #fff;
     text-align: center;
     pointer-events: none;
-    text-shadow: 0 1px 5px #000;
+    text-shadow: 0 1px 2px #000, 0 2px 5px #000;
     font-family: system-ui, sans-serif;
 }
 .compass-heading {
     font-size: 10px;
     letter-spacing: 3px;
-    color: #b9cbc5;
+    color: #fff;
 }
 .compass-heading span {
     letter-spacing: 0;
@@ -84,8 +84,8 @@ const heading = computed(() => String(Math.round(headingValue.value) % 360).padS
     margin-top: 3px;
     overflow: hidden;
     mask-image: linear-gradient(to right, transparent, #000 16%, #000 84%, transparent);
-    border-bottom: 1px solid #c4d7cd66;
-    background: linear-gradient(transparent, #07101255);
+    border-bottom: 1px solid #fff;
+    filter: drop-shadow(0 1px 2px #000);
 }
 .compass-mark {
     position: absolute;
@@ -104,32 +104,34 @@ const heading = computed(() => String(Math.round(headingValue.value) % 360).padS
     display: block;
     height: 6px;
     width: 1px;
-    background: #b4c5be99;
+    background: #fff;
+    box-shadow: 0 1px 3px #000;
 }
 .compass-mark.major i {
     height: 10px;
-    background: #e6f6ee;
+    background: #fff;
 }
 .compass-mark.north {
-    color: #edb572;
+    color: #fff;
 }
 .compass-pointer {
     width: 0;
     height: 0;
     border-left: 4px solid transparent;
     border-right: 4px solid transparent;
-    border-top: 6px solid #e8f4ed;
+    border-top: 6px solid #fff;
+    filter: drop-shadow(0 1px 2px #000);
     margin: -2px auto 6px;
 }
 .coordinates {
     font-family: ui-monospace, monospace;
     font-size: 10px;
     letter-spacing: 1px;
-    color: #c4d4cb;
+    color: #fff;
 }
 .coordinates span {
     padding: 0 8px;
-    color: #8a9d92;
+    color: #fff;
 }
 @media (max-width: 800px) {
     .navigation-strip {
@@ -148,19 +150,15 @@ const heading = computed(() => String(Math.round(headingValue.value) % 360).padS
     }
 }
 .navigation-strip {
-    background: rgba(7, 17, 13, 0.9);
-    border: 1px solid #6b8977;
-    border-radius: 12px;
     padding: 10px 16px;
-    box-shadow: 0 4px 20px #0005;
 }
 .compass-heading {
     font-size: 16px;
-    color: #edf5ef;
+    color: #fff;
 }
 .coordinates {
     font-size: 14px;
-    color: #edf5ef;
+    color: #fff;
     letter-spacing: 0.3px;
 }
 .compass-mark {

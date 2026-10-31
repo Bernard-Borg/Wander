@@ -44,7 +44,7 @@ the simulator is disposed. Driving camera limits and compass math are unchanged.
   the separate driving handbrake.
 - Help icon or ?: open the controls modal. Driving pauses, input clears, and
   focus stays in the modal until it is closed with Escape or its close button.
-- F3 or the graph icon: toggle the optional performance panel.
+- The home icon beside Settings returns to the main menu.
 
 [VehiclePhysics](../src/core/vehicle/VehiclePhysics.ts) works in metres, seconds,
 and radians. The simulator advances it at 120 Hz regardless of rendering FPS.
@@ -208,21 +208,15 @@ drive to judge steering feel or listening to the audio. No test files were added
 [Overlay.vue](../src/parts/Overlay.vue) coordinates events and shortcuts. Focused
 components in [hud/](../src/parts/hud/) own their markup and styles:
 `VehicleInstruments` (the preserved speedometer and other instruments),
-`NavigationCompass`, `HudActions`, `ControlsHelp`, `PerformancePanel`, and
+`NavigationCompass`, `HudActions`, `ControlsHelp`, and
 `HudIcon`. Settings keep their existing behaviour, with larger labels and icons
 for audio and city switching.
 
-## Performance panel
+## FPS counter
 
-Diagnostics are off by default. Enabling them samples the peak frame interval and
-CPU submission time every 100 ms and retains a timestamped 12-second history.
-The panel also shows current draw calls, rendered triangles, camera-frustum mesh
-count, total scene meshes and Three.js geometry/texture counts. Scene meshes include objects culled
-from the current view; draw calls/triangles describe rendering. CPU times exclude
-GPU execution and are not GPU timing measurements. Sampling and scene counting
-stop when the panel is disabled. The panel replaces the FPS badge in its top-right
-position and includes FPS. Closing it restores the simple badge. The compact HUD
-labels omit these explanatory details; the timing and count definitions live here.
+The HUD displays a compact FPS counter. Performance charts and their F3 shortcut
+have been removed. HUD text is non-selectable, and compass labels and markings
+use white foregrounds with dark shadows instead of a surrounding panel.
 
 ## Gravity and contact
 

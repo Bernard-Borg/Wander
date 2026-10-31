@@ -42,18 +42,6 @@ defineExpose({ focusHelp: () => helpButton.value?.focus() });
                 </svg>
             </button>
             <button
-                class="wander-button compact hud-button icon-button"
-                :class="{ selected: state.showPerformance }"
-                aria-label="Toggle performance graphs"
-                :aria-pressed="state.showPerformance"
-                title="Performance (F3)"
-                @click="simulator.togglePerformance"
-            >
-                <svg viewBox="0 0 24 24">
-                    <path d="M4 4v16h17M6 15l4-5 4 3 6-8" />
-                </svg>
-            </button>
-            <button
                 v-if="!state.creativeMode"
                 class="wander-button compact hud-button ignition-button"
                 :class="{ selected: state.vehicle.engine !== 'off' }"
@@ -83,7 +71,7 @@ defineExpose({ focusHelp: () => helpButton.value?.focus() });
                 title="Toggle creative mode (C)"
                 @click="simulator.setCreativeMode(!state.creativeMode)"
             >
-                {{ state.creativeMode ? "Drive (C)" : "Fly (C)" }}
+                {{ state.creativeMode ? "Drive" : "Fly" }}
             </button>
             <button class="wander-button compact hud-button" @click="simulator.resetLocation()">
                 {{ state.creativeMode ? "Reset view" : "Reset location" }}
@@ -120,15 +108,71 @@ defineExpose({ focusHelp: () => helpButton.value?.focus() });
     </div>
 </template>
 <style scoped>
-.hud-tools { position: absolute; right: 20px; bottom: 24px; z-index: 15; width: 228px; display: flex; flex-direction: column; gap: 10px; }
-.utility-row { display: flex; gap: 7px; }
-.icon-button { width: 44px; padding: 10px; }
-.ignition-button { flex: 1; }
-.settings-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-.settings-tools .hud-button { width: 100%; padding: 10px 6px; font-size: 13px; }
-.city-switcher { position: relative; }
-.city-menu { position: absolute; bottom: 100%; right: 0; margin-bottom: 9px; min-width: 190px; overflow: hidden; }
-@media (max-width: 800px) { .hud-tools { right: 16px; bottom: 230px; width: 214px; } }
-@media (max-width: 420px) { .hud-tools { bottom: 210px; } }
-@media (pointer: coarse) { .hud-tools { right: 12px; top: 158px; bottom: auto; width: 145px; max-height: 32vh; overflow-y: auto; } .settings-tools .hud-button { font-size: 12px; } }
+.hud-tools {
+    position: absolute;
+    right: 20px;
+    bottom: 24px;
+    z-index: 15;
+    width: 228px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.utility-row {
+    display: flex;
+    gap: 7px;
+}
+.icon-button {
+    width: 44px;
+    padding: 10px;
+}
+.ignition-button {
+    flex: 1;
+}
+.settings-tools {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+}
+.settings-tools .hud-button {
+    width: 100%;
+    padding: 10px 6px;
+    font-size: 13px;
+}
+.city-switcher {
+    position: relative;
+}
+.city-menu {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 9px;
+    min-width: 190px;
+    overflow: hidden;
+}
+@media (max-width: 800px) {
+    .hud-tools {
+        right: 16px;
+        bottom: 230px;
+        width: 214px;
+    }
+}
+@media (max-width: 420px) {
+    .hud-tools {
+        bottom: 210px;
+    }
+}
+@media (pointer: coarse) {
+    .hud-tools {
+        right: 12px;
+        top: 158px;
+        bottom: auto;
+        width: 145px;
+        max-height: 32vh;
+        overflow-y: auto;
+    }
+    .settings-tools .hud-button {
+        font-size: 12px;
+    }
+}
 </style>

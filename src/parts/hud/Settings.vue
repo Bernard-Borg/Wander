@@ -50,12 +50,17 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <button v-if="!props.hideTrigger" class="wander-secondary wander-button compact icon settings-button" aria-label="Open settings" title="Settings" @click="open">
+    <div v-if="!props.hideTrigger" class="settings-navigation">
+    <button class="wander-secondary wander-button compact icon settings-button" aria-label="Open settings" title="Settings" @click="open">
         <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="m9 3-1 3-3 1-2 3 2 2-1 3 3 2 3-1 2 3 3-1 1-3 3-1 2-3-2-2 1-3-3-2-3 1-2-3Z" />
             <circle cx="12" cy="11" r="3" />
         </svg>
     </button>
+    <button class="wander-secondary wander-button compact icon" aria-label="Back to main menu" title="Main menu" @click="simulator.returnToMenu()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-7v-7h-4v7H3Z" /></svg>
+    </button>
+    </div>
     <dialog
         ref="dialog"
         class="wander-dialog settings-dialog" :class="{ 'wander-secondary': !props.hideTrigger }" aria-labelledby="settings-title"
@@ -139,7 +144,7 @@ onUnmounted(() => {
 <style scoped>
 .settings-pages { display: flex; gap: 10px; }
 .settings-pages button { flex: 1; }
-.settings-button { position: absolute; top: max(20px, env(safe-area-inset-top)); left: 20px; z-index: 23; }
+.settings-navigation { display: flex; gap: 10px; position: absolute; top: max(20px, env(safe-area-inset-top)); left: 20px; z-index: 23; }
 .mute-toggle { width: 100%; justify-content: flex-start; }
 .audio-channel { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(60px, 140px) 42px; gap: 12px; }
 .audio-channel .wander-range { width: 100%; }

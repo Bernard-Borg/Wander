@@ -5,7 +5,7 @@
 
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import type { VehicleTelemetry, PerformanceSample } from "@/core/DrivingSimulator";
+import type { VehicleTelemetry } from "@/core/DrivingSimulator";
 import { DEFAULT_VEHICLE } from "@/core/vehicle/VehicleConfig";
 
 export const useStateStore = defineStore("state", () => {
@@ -34,8 +34,6 @@ export const useStateStore = defineStore("state", () => {
         name: DEFAULT_VEHICLE.name,
         gear: "P",
     });
-    const showPerformance = ref(false);
-    const performanceHistory = ref<PerformanceSample[]>([]);
 
     return {
         showMainMenu,
@@ -49,8 +47,6 @@ export const useStateStore = defineStore("state", () => {
         heading,
         displayedHeading,
         vehicle,
-        showPerformance,
-        performanceHistory,
         loadError,
         creativeMode,
     };

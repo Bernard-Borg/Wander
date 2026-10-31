@@ -11,7 +11,6 @@ import LocationSearch from "./hud/LocationSearch.vue";
 import Settings from "./hud/Settings.vue";
 import MobileControls from "./hud/MobileControls.vue";
 import { useSimulatorStore } from "@/stores/simulator";
-import PerformancePanel from "./hud/PerformancePanel.vue";
 
 const state = useStateStore();
 const radio = useRadioStore();
@@ -52,10 +51,6 @@ const onKey = (e: KeyboardEvent) => {
         e.preventDefault();
         simulator.resetLocation();
     }
-    if (e.key === "F3") {
-        e.preventDefault();
-        if (!e.repeat) simulator.togglePerformance();
-    }
     if (e.key === "?" && !help.value?.isOpen()) {
         e.preventDefault();
         help.value?.open();
@@ -67,15 +62,15 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
 </script>
 
 <template>
+    <div class="game-hud">
     <template v-if="playing">
         <NavigationCompass v-if="settings.showCompass" />
         <Settings />
         <MobileControls v-if="!simulator.isPaused" />
         <VehicleInstruments v-if="settings.showSpeedometer && !state.creativeMode" />
         <HudActions ref="actions" @help="help?.open()" />
-        <PerformancePanel v-if="state.showPerformance" @close="simulator.togglePerformance" />
     </template>
-    <div v-if="!playing || !state.showPerformance" class="absolute flex gap-3 top-5 right-5 z-10">
+    <div class="absolute flex gap-3 top-5 right-5 z-10">
         <LocationSearch v-if="settings.showSearch" />
         <div
             class="bg-black/60 backdrop-blur-md px-4 py-2 rounded-lg border flex items-center max-h-12 border-white/20"
@@ -86,4 +81,5 @@ onUnmounted(() => window.removeEventListener("keydown", onKey));
         </div>
     </div>
     <ControlsHelp ref="help" @closed="actions?.focusHelp()" />
+    </div>
 </template>
