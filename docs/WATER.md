@@ -22,11 +22,34 @@ clipped, rather than discarded wholesale.
 
 ## Heights and rendering
 
-Sea and `water=bay` surfaces are at 0 m above sea level, converted to the same
-city-relative Y coordinates as roads and terrain. Inland surfaces use numeric
-OSM `ele` when supplied, otherwise the median terrain elevation along their
-outer boundary. This fallback is an estimate; add a measured `ele` in metres
-above sea level to the feature properties to correct it.
+Coastline-generated sea stays at 0 m above sea level. Explicit numeric OSM `ele`
+values on inland/bay polygons are authoritative, including zero and negative values.
+Blank or nonnumeric elevations use estimation instead.
+
+For untagged water, estimate the **10th percentile** of terrain heights at the outer
+boundary vertices minus **0.5 m**. The repeated closing vertex is excluded. The
+percentile linearly interpolates sorted samples at index `(count - 1) * 0.1`,
+favouring low banks without always selecting the absolute lowest sample. Very small
+rings still have limited resistance to outliers. Group polygons whose actual boundaries touch,
+intersect, or whose water interiors overlap. Connections are transitive and include
+shared edges and vertex-on-edge contacts with differing vertex spacing. A tiny
+0.1 mm numerical tolerance does not bridge real gaps. Dry holes/islands do not
+connect an enclosed isolated pond to the surrounding water.
+
+Each connected group uses its **largest polygon by area, subtracting holes**, as
+its elevation source. A group touching coastline sea or an untagged bay uses sea
+level instead. Explicit `ele` polygons keep their own values even when different
+from their group's estimate; if the largest polygon has explicit `ele`, its value
+supplies the other untagged polygons. Independent water bodies retain their own
+local estimate and are not forced to match the globally largest lake/canal.
+
+[WaterLevels](../src/core/scene/WaterLevels.ts) performs this resolution once at load
+time using an indexed boundary search. Rendered water, shoreline banks, ship
+placement and vehicle contact subsequently use the same resolved heights. This is
+a game heuristic, not a hydraulic model: locks/dams are not automatically detected
+as connectivity barriers. Use explicit elevations where touching water bodies
+must retain different levels. Terrain is never raised to meet water. The rendered
+surface remains 2.5 cm above its resolved source level.
 
 [WaterGenerator](../src/core/scene/WaterGenerator.ts) triangulates these areas
 with their holes, preserves source terrain elevations, removes covered terrain using the shared polygon clipping

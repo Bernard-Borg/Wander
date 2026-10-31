@@ -5,6 +5,7 @@
 
 import * as THREE from "three";
 import { RoadCutouts } from "./RoadCutouts";
+import { resolveWaterLevels } from "./WaterLevels";
 import { SpatialGrid } from "./CollisionWorld";
 import type { Point } from "./CollisionWorld";
 import type { SurfaceSample, TerrainBounds } from "./ElevationTerrain";
@@ -20,6 +21,10 @@ interface WaterArea {
     outer: Point[];
     holes: Point[][];
     height: number;
+    /** Whether a valid explicit elevation overrides group estimates. */
+    fixedHeight?: boolean;
+    /** Whether this area anchors connected untagged water at sea level. */
+    sea?: boolean;
 }
 /**
  * Formats a horizontal point into a stable rounded key used to stitch coastline endpoints.
@@ -148,24 +153,35 @@ export class WaterGenerator {
                     const rings = polygon.map(convert);
                     if (!rings[0]?.length) continue;
                     const elevations = rings[0]
+                        .filter((pt,i,ring) => i===0 || pt.x!==ring[0]!.x || pt.z!==ring[0]!.z)
                         .map((pt) => sample(pt.x, pt.z).height)
                         .sort((a, b) => a - b);
                     const ele =
                         typeof p.ele === "number"
                             ? p.ele
-                            : typeof p.ele === "string"
+                            : typeof p.ele === "string" && p.ele.trim() !== ""
                               ? Number(p.ele)
                               : NaN;
+                    // Interpolated 10th percentile favours low banks without selecting
+                    // the absolute minimum when a boundary contains a bad sample.
+                    const percentileIndex = (elevations.length - 1) * 0.1;
+                    const lower = Math.floor(percentileIndex);
+                    const lowBank = THREE.MathUtils.lerp(
+                        elevations[lower]!,
+                        elevations[Math.ceil(percentileIndex)]!,
+                        percentileIndex - lower,
+                    );
                     const height =
-                        p.water === "bay"
-                            ? -referenceHeight
-                            : Number.isFinite(ele)
+                        Number.isFinite(ele)
                               ? ele - referenceHeight
-                              : elevations[Math.floor(elevations.length / 2)];
+                              : p.water === "bay" ? -referenceHeight
+                              : lowBank - 0.5;
                     inland.push({
                         outer: rings[0],
                         holes: rings.slice(1),
                         height,
+                        fixedHeight: Number.isFinite(ele),
+                        sea: p.water === "bay",
                     });
                 }
             }
@@ -266,6 +282,8 @@ export class WaterGenerator {
                     "Water: coastline boundary did not form a closed sea polygon; skipped.",
                 );
         }
+        for (const sea of seas) { sea.sea = true; sea.fixedHeight = true; }
+        resolveWaterLevels([...seas, ...inland], -referenceHeight);
         // Index every polygon before processing shores, so neighbouring water is
         // recognized independently of feature order or different boundary vertices.
         for (const area of [...seas, ...inland]) this.coverage.insert(area,

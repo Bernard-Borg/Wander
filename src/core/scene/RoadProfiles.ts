@@ -31,7 +31,7 @@ export interface RoadLevelSettings {
 export const DEFAULT_ROAD_LEVELS: RoadLevelSettings = {
     layerSeparation: 3,
     tunnelCover: 2,
-    tunnelHeadroom: 3.5,
+    tunnelHeadroom: 4,
     rampLength: 35,
     tunnelRampLength: 12,
     maxGrade: 0.22,
