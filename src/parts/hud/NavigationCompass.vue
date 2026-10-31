@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { useClipboard } from "@vueuse/core";
 import { useStateStore } from "@/stores/state";
 import { compassHeading } from "./navigation";
 
 const state = useStateStore();
+const { copy, copied, isSupported } = useClipboard({ legacy: true, copiedDuring: 1500 });
+const copyFailed = ref(false);
 
 const headingValue = computed(() => compassHeading(state.displayedHeading));
 const compass = computed(() =>
@@ -32,6 +35,16 @@ const compass = computed(() =>
 );
 
 const heading = computed(() => String(Math.round(headingValue.value) % 360).padStart(3, "0"));
+
+/** Copies a signed decimal latitude/longitude pair suitable for pasting into map search. */
+const copyCoordinates = async (): Promise<void> => {
+    copyFailed.value = false;
+    try {
+        await copy(`${state.coordinates.lat.toFixed(5)}, ${state.coordinates.lon.toFixed(5)}`);
+    } catch {
+        copyFailed.value = true;
+    }
+};
 </script>
 <template>
     <div class="navigation-strip" aria-label="Compass and coordinates">
@@ -52,6 +65,16 @@ const heading = computed(() => String(Math.round(headingValue.value) % 360).padS
         <div class="coordinates">
             {{ state.coordinates.lat.toFixed(5) }}° N <span> / </span
             >{{ state.coordinates.lon.toFixed(5) }}° E
+            <button v-if="isSupported" class="coordinate-copy" type="button"
+                :aria-label="copied ? 'Coordinates copied' : 'Copy coordinates'"
+                :title="copyFailed ? 'Unable to copy coordinates. Try again.' : copied ? 'Copied!' : 'Copy coordinates'"
+                @pointerdown.stop @keydown.stop @click.stop="copyCoordinates">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path v-if="copied" d="m5 12 4 4L19 6" />
+                    <g v-else><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></g>
+                </svg>
+            </button>
+            <span class="sr-only" role="status">{{ copyFailed ? 'Unable to copy coordinates.' : copied ? 'Coordinates copied.' : '' }}</span>
         </div>
     </div>
 </template>
@@ -124,11 +147,35 @@ const heading = computed(() => String(Math.round(headingValue.value) % 360).padS
     margin: -2px auto 6px;
 }
 .coordinates {
+    position: relative;
+    width: fit-content;
+    margin-inline: auto;
     font-family: ui-monospace, monospace;
     font-size: 10px;
     letter-spacing: 1px;
     color: #fff;
 }
+.coordinate-copy {
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-left: 4px;
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    padding: 6px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #fff;
+    pointer-events: auto;
+    cursor: pointer;
+}
+.coordinate-copy:hover { background: #ffffff20; }
+.coordinate-copy:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.coordinate-copy svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; filter: drop-shadow(0 1px 2px #000); }
 .coordinates span {
     padding: 0 8px;
     color: #fff;
