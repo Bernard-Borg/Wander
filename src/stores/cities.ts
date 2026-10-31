@@ -86,6 +86,7 @@ export const CITY_CONFIGS: Record<string, CityConfig> = {
         elevation: { file: "Vaduz.hgt", south: 47, west: 9 },
         centerLat: 47.141,
         centerLon: 9.5215,
+        groundColor: "#395431",
     },
     valletta: {
         name: "Valletta",
