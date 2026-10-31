@@ -94,6 +94,10 @@ export class RoadProfile {
     endHalfWidth: number;
     startNormal?: THREE.Vector3;
     endNormal?: THREE.Vector3;
+    /** Shared fillet midpoint replacing the sharp plan-view endpoint, retaining graph connectivity. */
+    startJoinPoint?: THREE.Vector3;
+    /** Shared fillet midpoint at the road end. */
+    endJoinPoint?: THREE.Vector3;
     private horizontalLength = 0;
     private readonly horizontalCurve: THREE.CatmullRomCurve3;
     /**
@@ -102,9 +106,10 @@ export class RoadProfile {
      * @param t - Normalized curve or local interpolation parameter.
      */
     halfWidthAt(t: number): number {
-        const span = Math.min(25, this.horizontalLength / 2);
-        const start = 1 - smooth((t * this.horizontalLength) / Math.max(0.01, span));
-        const end = 1 - smooth(((1 - t) * this.horizontalLength) / Math.max(0.01, span));
+        const startSpan = Math.min(this.horizontalLength / 2, Math.max(15, Math.abs(this.startHalfWidth - this.input.halfWidth) * 12));
+        const endSpan = Math.min(this.horizontalLength / 2, Math.max(15, Math.abs(this.endHalfWidth - this.input.halfWidth) * 12));
+        const start = 1 - smooth((t * this.horizontalLength) / Math.max(0.01, startSpan));
+        const end = 1 - smooth(((1 - t) * this.horizontalLength) / Math.max(0.01, endSpan));
         return (
             this.input.halfWidth +
             (this.startHalfWidth - this.input.halfWidth) * start +
@@ -133,7 +138,8 @@ export class RoadProfile {
      * @param t - Normalized curve or local interpolation parameter.
      */
     perpendicularAt(t: number): THREE.Vector3 {
-        const tangent = this.horizontalCurve.getTangent(t);
+        const tangent = this.horizontalPoint(Math.min(1, t + 0.0001))
+            .sub(this.horizontalPoint(Math.max(0, t - 0.0001))).normalize();
         const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
         const blend = Math.min(0.5, 15 / Math.max(1, this.horizontalLength));
         if (this.startNormal && t < blend) normal.lerp(this.startNormal, 1 - smooth(t / blend));
@@ -141,6 +147,33 @@ export class RoadProfile {
             normal.lerp(this.endNormal, 1 - smooth((1 - t) / blend));
         return normal.normalize();
     }
+
+    /** Rounds a connected endpoint through a shared fillet midpoint without changing graph connectivity.
+     * @param t - Normalized position along the original road parameterization.
+     * @param target - Destination for the horizontal centreline point.
+     */
+    private horizontalPoint(t: number, target = new THREE.Vector3()): THREE.Vector3 {
+        const span = Math.min(0.3, 18 / Math.max(1, this.horizontalLength));
+        const start = !!this.startNormal && t < span;
+        const end = !!this.endNormal && t > 1 - span;
+        if (!start && !end) return this.horizontalCurve.getPoint(t, target);
+        const normal = (start ? this.startNormal : this.endNormal)!;
+        const direction = new THREE.Vector3(normal.z, 0, -normal.x);
+        const a = this.horizontalCurve.getPoint(start ? 0 : 1 - span);
+        const b = this.horizontalCurve.getPoint(start ? span : 1);
+        if (start && this.startJoinPoint) a.copy(this.startJoinPoint).setY(0);
+        if (end && this.endJoinPoint) b.copy(this.endJoinPoint).setY(0);
+        const handle = a.distanceTo(b) / 3;
+        const c = a.clone().addScaledVector(start ? direction : this.horizontalCurve.getTangent(1 - span), handle);
+        const d = b.clone().addScaledVector(start ? this.horizontalCurve.getTangent(span) : direction, -handle);
+        const u = start ? t / span : (t - 1 + span) / span;
+        const v = 1 - u;
+        return target.copy(a).multiplyScalar(v*v*v).addScaledVector(c,3*v*v*u)
+            .addScaledVector(d,3*v*u*u).addScaledVector(b,u*u*u);
+    }
+    /** Returns the maximum plan-view endpoint blend distance allowed by this road's length. */
+    horizontalJoinReach(): number { return this.horizontalLength * 0.3; }
+
     private grid = new SpatialGrid<Segment>();
     private segments: Segment[] = [];
     /**
@@ -190,7 +223,7 @@ export class RoadProfile {
              * @param target - Vector receiving the sampled curve point.
              */
             getPoint(t: number, target = new THREE.Vector3()): THREE.Vector3 {
-                path.getPoint(t, target);
+                profile.horizontalPoint(t, target);
                 target.y = profile.sample(target.x, target.z).height;
                 return target;
             }
@@ -256,13 +289,14 @@ export class RoadProfile {
             const normal = start ? this.startNormal : this.endNormal;
             if (!normal) continue;
             const end = this.nodes[start ? 0 : this.nodes.length - 1];
+            const anchor = (start ? this.startJoinPoint : this.endJoinPoint) ?? end;
             const neighbor = this.nodes[start ? 1 : this.nodes.length - 2];
             const direction = start ? 1 : -1;
-            const along = ((x - end.x) * normal.z - (z - end.z) * normal.x) * direction;
+            const along = ((x - anchor.x) * normal.z - (z - anchor.z) * normal.x) * direction;
             const span = Math.min(15, this.horizontalLength / 3);
             // A join plane is local to its endpoint. On switchbacks, projecting
             // onto its infinite plane can capture a remote leg and teleport its height.
-            const lateral = (x - end.x) * normal.x + (z - end.z) * normal.z;
+            const lateral = (x - anchor.x) * normal.x + (z - anchor.z) * normal.z;
             const endWidth =
                 (start ? this.startHalfWidth : this.endHalfWidth) +
                 Math.max(this.input.sidewalks?.left ?? 0, this.input.sidewalks?.right ?? 0) +
@@ -271,13 +305,13 @@ export class RoadProfile {
                 along < -0.01 ||
                 along >= span ||
                 Math.abs(lateral) > endWidth ||
-                Math.hypot(x - end.x, z - end.z) > Math.hypot(span, endWidth)
+                Math.hypot(x - anchor.x, z - anchor.z) > Math.hypot(span, endWidth)
             )
                 continue;
             const blend = 1 - smooth(Math.max(0, along) / Math.max(span, 0.001));
             const grade =
                 (neighbor.height - end.height) /
-                Math.max(0.001, Math.hypot(neighbor.x - end.x, neighbor.z - end.z));
+                Math.max(0.001, Math.hypot(neighbor.x - anchor.x, neighbor.z - anchor.z));
             if (Math.abs(along) < 1e-6) {
                 height = end.height;
                 slopeX = normal.z * direction * grade;
@@ -480,7 +514,7 @@ export class RoadProfileNetwork {
     }
 
     /**
-     * Matches widths and edge directions at aligned endpoints connecting exactly two roads.
+     * Shares endpoint cross-sections and rounds bends between exactly two connected roads.
      */
     private configureJoins(): void {
         const ends = new Map<Node, Array<{ p: RoadProfile; start: boolean }>>();
@@ -496,23 +530,35 @@ export class RoadProfileNetwork {
             const normals = list.map(({ p, start }) => {
                 return p.perpendicularAt(start ? 0 : 1);
             });
-            const dot = normals[0].dot(normals[1]);
-            if (Math.abs(dot) < 0.75) continue;
+            // Orient both normals in the first road's travel direction, regardless of OSM way direction.
+            const orientation = list[0].start === list[1].start ? -1 : 1;
+            const dot = normals[0].dot(normals[1]) * orientation;
+            if (dot < -0.7) continue; // Near-reversals need a junction/turning-area solution.
             const shared = normals[0]
                 .clone()
-                .addScaledVector(normals[1], dot < 0 ? -1 : 1)
+                .addScaledVector(normals[1], orientation)
                 .normalize();
-            const width = Math.max(...list.map((e) => e.p.input.halfWidth));
+            const width = list.reduce((sum, e) => sum + e.p.input.halfWidth, 0) / 2;
+            const reach = Math.min(18, ...list.map(({p}) => p.horizontalJoinReach()));
+            const join = new THREE.Vector3();
+            list.forEach(({start}, i) => {
+                const n = normals[i]!;
+                join.addScaledVector(new THREE.Vector3(n.z, 0, -n.x), start ? 1 : -1);
+            });
+            const node = list[0].p.nodes[list[0].start ? 0 : list[0].p.nodes.length - 1];
+            join.multiplyScalar(reach * 0.25).add(new THREE.Vector3(node.x, 0, node.z));
             list.forEach(({ p, start }, i) => {
-                const normal = shared.clone().multiplyScalar(i === 1 && dot < 0 ? -1 : 1);
+                const normal = shared.clone().multiplyScalar(i === 1 ? orientation : 1);
                 if (start) {
                     p.startLaneCount = list[1 - i].p.input.lanes;
                     p.startHalfWidth = width;
                     p.startNormal = normal;
+                    p.startJoinPoint = join.clone();
                 } else {
                     p.endLaneCount = list[1 - i].p.input.lanes;
                     p.endHalfWidth = width;
                     p.endNormal = normal;
+                    p.endJoinPoint = join.clone();
                 }
             });
         }

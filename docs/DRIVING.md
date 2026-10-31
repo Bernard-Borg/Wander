@@ -255,3 +255,19 @@ shortcuts and paused dialogs do not trigger keyboard recovery.
 When returning from creative flight, the car keeps the camera position/elevation
 and takes its yaw from the camera's horizontal viewing direction. Pitch is ignored;
 for an exactly vertical view, the last car heading is retained.
+
+
+## Rounded two-road joins
+
+When exactly two road endpoints connect, their ribbons now share a cross-section
+and a short cubic fillet through the inside of the bend. This also works when
+OSM ways have opposite coordinate directions. Straight continuations retain their
+centreline. Sharp near-reversals and branching T/crossroads retain the existing
+junction behaviour; this is not a generalized intersection mesher.
+
+Both carriageways taper to their mean endpoint width. Taper distance grows with
+the width difference and is bounded by available road length, so 1/2/3-lane and
+other lane-count changes do not create an abrupt width step. Existing divider
+markings fade at changes rather than inventing turn-lane or traffic-direction rules.
+The smoothed profile is shared by road mesh, paint, sidewalks, structural sides
+and road contact sampling; this does not change the bridge height solver.
