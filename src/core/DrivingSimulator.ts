@@ -107,7 +107,7 @@ export class DrivingSimulator {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setClearColor(0x87ceeb, 1); // Sky blue background
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.shadowMap.type = THREE.PCFShadowMap;
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.container.appendChild(this.renderer.domElement);
 
@@ -255,7 +255,8 @@ export class DrivingSimulator {
                 return false;
             }
             replacement.setWorld(this.sceneManager.collisions, (x, z, y) =>
-                this.sceneManager.getRoadState(x, z, y));
+                this.sceneManager.getRoadState(x, z, y),
+            );
             const position = previous.getPosition();
             const direction = previous.getDirection();
             replacement.setPosition(position.x, position.y, position.z);
@@ -359,8 +360,12 @@ export class DrivingSimulator {
                         const previousPosition = this.car!.getPosition();
                         this.carControls!.update(dt);
                         this.car!.update(dt);
-                        touchedWater = this.sceneManager.isInWater(this.car!.getPosition(),
-                            this.car!.config.collision, this.car!.physics.yaw, previousPosition);
+                        touchedWater = this.sceneManager.isInWater(
+                            this.car!.getPosition(),
+                            this.car!.config.collision,
+                            this.car!.physics.yaw,
+                            previousPosition,
+                        );
                     });
                     if (touchedWater) this.resetCarPosition();
                     this.carControls.updateAudio(delta);
@@ -495,7 +500,6 @@ export class DrivingSimulator {
                 // Update heading callbacks
                 const carHeading = this.getCarHeading();
                 this.headingUpdateCallbacks.forEach((callback) => callback(carHeading));
-
 
                 // Update coordinate callbacks
                 const coords = this.sceneManager.localToLatLon(carPosition.x, carPosition.z);
@@ -685,7 +689,6 @@ export class DrivingSimulator {
         this.headingUpdateCallbacks.push(callback);
     }
 
-
     /**
      * Registers a subscriber for coordinate update notifications.
      *
@@ -786,7 +789,9 @@ export class DrivingSimulator {
      * Moves the sunlight shadow volume with the camera while retaining the configured sun direction.
      */
     /** Unlocks vehicle audio during a touch gesture. */
-    unlockTouchAudio(): void { this.carControls?.unlockTouchAudio(); }
+    unlockTouchAudio(): void {
+        this.carControls?.unlockTouchAudio();
+    }
 
     /** Applies live renderer quality preferences without rebuilding the city.
      * @param shadows - Whether shadow maps should be rendered.
@@ -795,10 +800,16 @@ export class DrivingSimulator {
     setGraphics(shadows: boolean, scale = 1): void {
         this.renderer.shadowMap.enabled = shadows;
         this.renderer.shadowMap.needsUpdate = true;
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Math.max(0.75, Math.min(2, scale))));
+        this.renderer.setPixelRatio(
+            Math.min(window.devicePixelRatio || 1, Math.max(0.75, Math.min(2, scale))),
+        );
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.scene.traverse(object => {
-            if (object instanceof THREE.Mesh) for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.needsUpdate = true;
+        this.scene.traverse((object) => {
+            if (object instanceof THREE.Mesh)
+                for (const material of Array.isArray(object.material)
+                    ? object.material
+                    : [object.material])
+                    material.needsUpdate = true;
         });
     }
 
@@ -808,8 +819,9 @@ export class DrivingSimulator {
         this.sky.setTimeOfDay(time);
         this.sceneManager.setNight(time === "night");
         this.car?.setNightLighting(time === "night");
-        const night = time === "night", morning = time === "morning";
-        this.scene.traverse(object => {
+        const night = time === "night",
+            morning = time === "morning";
+        this.scene.traverse((object) => {
             if (object instanceof THREE.AmbientLight) {
                 object.intensity = night ? 0.16 : 0.22;
                 object.color.set(night ? 0x8296c9 : 0xdbe9ff);
@@ -828,7 +840,9 @@ export class DrivingSimulator {
     }
 
     /** Searches locations in the active city only. */
-    searchLocations(query: string): MapLocation[] { return this.isLoaded ? this.sceneManager.searchLocations(query) : []; }
+    searchLocations(query: string): MapLocation[] {
+        return this.isLoaded ? this.sceneManager.searchLocations(query) : [];
+    }
 
     /** Teleports the active camera or stopped vehicle to a validated map location.
      * @param location - Destination from coordinate input or the active city street search.
@@ -837,11 +851,21 @@ export class DrivingSimulator {
         if (!this.isLoaded || !this.car) return;
         const position = this.sceneManager.teleportPosition(location.lat, location.lon, location.y);
         this.carControls?.resetInput();
-        if (this.flight?.enabled) this.camera.position.copy(position).add(new THREE.Vector3(0, 3, 0));
-        else { this.car.resetPhysics(); this.car.setPosition(position.x, position.y, position.z); this.car.resetInterpolation(); this.cameraReset = true; }
+        if (this.flight?.enabled)
+            this.camera.position.copy(position).add(new THREE.Vector3(0, 3, 0));
+        else {
+            this.car.resetPhysics();
+            this.car.setPosition(position.x, position.y, position.z);
+            this.car.resetInterpolation();
+            this.cameraReset = true;
+        }
         this.physicsClock.reset();
-        this.sceneManager.update(performance.now() / 1000, this.flight?.enabled ? this.camera.position : position, true);
-        this.coordinateUpdateCallbacks.forEach(callback => callback(location.lat, location.lon));
+        this.sceneManager.update(
+            performance.now() / 1000,
+            this.flight?.enabled ? this.camera.position : position,
+            true,
+        );
+        this.coordinateUpdateCallbacks.forEach((callback) => callback(location.lat, location.lon));
     }
 
     private updateSunlight(): void {

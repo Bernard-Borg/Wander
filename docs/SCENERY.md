@@ -122,3 +122,11 @@ The generator no longer interprets `information`, `advertising`,
 Other independently supported tags on the same feature can still generate furniture.
 Statues explicitly identified by artwork_type, memorial or historic remain supported.
 Named museum/hotel/hostel building signs are handled by the building generator.
+
+Hydrants tagged `emergency=fire_hydrant` with `fire_hydrant:type=underground`
+are omitted from both decor geometry and collisions. Other/missing types retain
+the current above-ground representation. The tag spelling is `fire_hydrant:type`.
+
+Traffic-sign decor now uses the configurable basic families in
+[TRAFFIC_SIGNS.md](TRAFFIC_SIGNS.md#configurable-basic-sign-rendering). Only mapped
+Point features produce panels; unknown codes and sign lines/polygons are omitted.

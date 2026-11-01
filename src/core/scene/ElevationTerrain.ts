@@ -286,6 +286,24 @@ export class ElevationTerrain {
 
     /** Split a road/marking triangle on terrain cell diagonals so it cannot cut through a hill. */
     cutTriangle(points: Array<{ x: number; z: number }>): Array<Array<{ x: number; z: number }>> {
+        // Most two-metre road/paint triangles already fit in one terrain triangle.
+        // Returning them unchanged avoids six polygon clips without changing sampling.
+        if (points.length === 3) {
+            const firstX = (points[0].x - this.bounds.minX) / this.stepX;
+            const firstZ = (points[0].z - this.bounds.minZ) / this.stepZ;
+            const col = Math.floor(firstX), row = Math.floor(firstZ);
+            if (col >= 0 && col < this.columns - 1 && row >= 0 && row < this.rows - 1) {
+                let sameCell = true, below = true, above = true;
+                for (const point of points) {
+                    const x = (point.x - this.bounds.minX) / this.stepX;
+                    const z = (point.z - this.bounds.minZ) / this.stepZ;
+                    if (Math.floor(x) !== col || Math.floor(z) !== row) { sameCell = false; break; }
+                    const sum = x - col + z - row;
+                    below &&= sum <= 1; above &&= sum >= 1;
+                }
+                if (sameCell && (below || above)) return [points];
+            }
+        }
         const minCol = Math.max(
             0,
             Math.floor((Math.min(...points.map((p) => p.x)) - this.bounds.minX) / this.stepX),

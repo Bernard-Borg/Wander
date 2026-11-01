@@ -98,9 +98,14 @@ export class RoadGenerator {
      * @returns Road surface elevation in local metres.
      */
     private roadHeight(x: number, z: number): number {
-        return (
-            this.activeProfile?.sample(x, z).height ?? this.groundSample(x, z).height + ROAD_HEIGHT
-        );
+        if (!this.activeProfile) return this.groundSample(x, z).height + ROAD_HEIGHT;
+        let column = this.generationHeights.get(x);
+        const cached = column?.get(z);
+        if (cached !== undefined) return cached;
+        const height = this.activeProfile.sample(x, z).height;
+        if (!column) { column = new Map(); this.generationHeights.set(x, column); }
+        column.set(z, height);
+        return height;
     }
 
     /**
@@ -175,6 +180,8 @@ export class RoadGenerator {
         profile: RoadProfile;
     }> = [];
     private surfaceMaterials = new Map<string, THREE.MeshStandardMaterial>();
+    /** Exact-coordinate heights reused only while generating one road profile. */
+    private generationHeights = new Map<number, Map<number, number>>();
     private surfaceGrid = new SpatialGrid<RoadSegment>();
     private readonly surfaceSampleSpacing = 2; // meters between surface samples
 
@@ -327,6 +334,7 @@ export class RoadGenerator {
         this.roadSurfaceSamples = [];
         this.surfaceGrid.clear();
         this.activeProfile = null;
+        this.generationHeights.clear();
         this.profiles = [];
         this.cutouts.clear();
         this.corridors.clear();
@@ -417,10 +425,14 @@ export class RoadGenerator {
                     "Generating roads and markings",
                     `${index.toLocaleString()} / ${this.profiles.length.toLocaleString()} roads`,
                 );
+            this.generationHeights.clear();
             this.activeProfile = profile;
-            this.createRoadFromProfile(profile, names.get(profile.input.id));
+            profile.setGenerationCaching(true);
+            try { this.createRoadFromProfile(profile, names.get(profile.input.id)); }
+            finally { profile.setGenerationCaching(false); }
         }
         this.activeProfile = null;
+        this.generationHeights.clear();
         await report?.("Batching nearby road geometry");
         this.batchRoadGeometry();
         console.log(
@@ -436,6 +448,8 @@ export class RoadGenerator {
         this.roadGroup.userData.unbatchedMeshes =
             this.roadGroup.children.length + this.tunnelGroup.children.length;
         for (const group of [this.roadGroup, this.tunnelGroup]) {
+            const removed = new Set<THREE.Mesh>();
+            const merged: THREE.Mesh[] = [];
             const batches = new Map<string, THREE.Mesh[]>();
             for (const object of [...group.children]) {
                 if (!(object instanceof THREE.Mesh) || Array.isArray(object.material)) continue;
@@ -463,11 +477,17 @@ export class RoadGenerator {
                 mesh.castShadow = meshes.some((m) => m.castShadow);
                 mesh.receiveShadow = meshes.some((m) => m.receiveShadow);
                 for (const old of meshes) {
-                    group.remove(old);
+                    removed.add(old);
                     old.geometry.dispose();
                 }
-                group.add(mesh);
+                merged.push(mesh);
             }
+            // Removing each of tens of thousands of children separately repeatedly
+            // scans/shifts the same array. Rebuild the child list once per group.
+            const retained = group.children.filter(child => !removed.has(child as THREE.Mesh));
+            group.clear();
+            for (const child of retained) group.add(child);
+            for (const mesh of merged) group.add(mesh);
         }
         const surfaceMaterials = new Set<THREE.Material>([
             this.sharedMaterials.roadMaterial,

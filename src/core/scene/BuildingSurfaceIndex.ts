@@ -6,9 +6,12 @@
 import * as THREE from "three";
 import { SpatialGrid, type Point } from "./CollisionWorld";
 
+/** Projected triangle and reusable broad-phase bounds. */
+interface SurfaceTriangle { points: Point[]; minX: number; maxX: number; minZ: number; maxZ: number; }
+
 /** Remove overlapping coplanar surfaces, including opposite-facing shared walls. */
 export class BuildingSurfaceIndex {
-    private planes = new Map<string, SpatialGrid<Point[]>>();
+    private planes = new Map<string, SpatialGrid<SurfaceTriangle>>();
     trimmedTriangles = 0;
 
     /**
@@ -76,7 +79,7 @@ export class BuildingSurfaceIndex {
             const area = (poly: number[][]) => Math.abs(signedArea(poly.map(project)));
             let grid = this.planes.get(key);
             if (!grid) {
-                grid = new SpatialGrid<Point[]>(20);
+                grid = new SpatialGrid<SurfaceTriangle>(20);
                 this.planes.set(key, grid);
             }
             const minX = Math.min(...projected.map((p) => p.x)),
@@ -86,7 +89,22 @@ export class BuildingSurfaceIndex {
             const candidates = new Set<Point[]>();
             for (let x = Math.floor(minX / 20); x <= Math.floor(maxX / 20); x++)
                 for (let z = Math.floor(minZ / 20); z <= Math.floor(maxZ / 20); z++)
-                    for (const tri of grid.at(x * 20 + 0.001, z * 20 + 0.001)) candidates.add(tri);
+                    for (const tri of grid.at(x * 20 + 0.001, z * 20 + 0.001)) {
+                        const bounds = tri;
+                        // A grid cell is only a broad phase: most roof/wall triangles
+                        // in the same 20 m cell have disjoint projected bounds.
+                        if (bounds.maxX <= minX || bounds.minX >= maxX || bounds.maxZ <= minZ || bounds.minZ >= maxZ) continue;
+                        candidates.add(tri.points);
+                    }
+            if (!candidates.size) {
+                if (signedArea(projected) < 0) projected.reverse();
+                grid.insert({ points: projected, minX, maxX, minZ, maxZ }, minX, minZ, maxX, maxZ);
+                for (const vertex of source) for (let attribute = 0; attribute < attrs.length; attribute++) {
+                    const size = attrs[attribute][1].itemSize, offset = offsets[attribute];
+                    for (let component = 0; component < size; component++) output[attribute].push(vertex[offset + component]);
+                }
+                continue;
+            }
             /**
              * Clips a polygon to one half-space, interpolating vertices where edges cross the boundary.
              *
@@ -154,7 +172,7 @@ export class BuildingSurfaceIndex {
                 this.trimmedTriangles++;
             if (polys.length) {
                 if (signedArea(projected) < 0) projected.reverse();
-                grid.insert(projected, minX, minZ, maxX, maxZ);
+                grid.insert({ points: projected, minX, maxX, minZ, maxZ }, minX, minZ, maxX, maxZ);
             }
             for (const poly of polys)
                 for (let j = 1; j < poly.length - 1; j++) {

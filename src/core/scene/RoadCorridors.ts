@@ -22,11 +22,14 @@ interface Volume {
 /** Height-aware road volumes shared by junction paint, tunnel openings and building cutouts. */
 export class RoadCorridors {
     private grid = new SpatialGrid<Volume>(20);
+    /** Tunnel-only queries avoid visiting all nearby surface-road volumes. */
+    private tunnelGrid = new SpatialGrid<Volume>(20);
     /**
      * Clears generated content and cached lookup data so the instance can be reused.
      */
     clear(): void {
         this.grid.clear();
+        this.tunnelGrid.clear();
     }
     /**
      * Rebuilds the spatial representation from the supplied scene objects or solved road profiles.
@@ -36,6 +39,8 @@ export class RoadCorridors {
     build(profiles: RoadProfile[]): void {
         this.clear();
         for (const profile of profiles) {
+            profile.setGenerationCaching(true);
+            try {
             const count = Math.max(2, Math.ceil(profile.curve.getLength() / 2));
             for (let i = 0; i < count; i++) {
                 const a = profile.curve.getPoint(i / count),
@@ -100,7 +105,9 @@ export class RoadCorridors {
                     maxZ: Math.max(...polygon.map((p) => p.z)),
                 };
                 this.grid.insert(v, v.minX - 0.2, v.minZ - 0.2, v.maxX + 0.2, v.maxZ + 0.2);
+                if (v.tunnel) this.tunnelGrid.insert(v, v.minX - 0.2, v.minZ - 0.2, v.maxX + 0.2, v.maxZ + 0.2);
             }
+            } finally { profile.setGenerationCaching(false); }
         }
     }
     /**
@@ -113,7 +120,8 @@ export class RoadCorridors {
      * @param tunnelsOnly - Whether to restrict lookup to tunnel corridors.
      */
     contains(x: number, z: number, y: number, exclude?: string, tunnelsOnly = true): boolean {
-        for (const volume of this.grid.at(x, z)) {
+        const grid = tunnelsOnly ? this.tunnelGrid : this.grid;
+        for (const volume of grid.at(x, z)) {
             if (volume.owner === exclude || (tunnelsOnly && !volume.tunnel)) continue;
             if (volume.planes.every((p) => p.x * x + p.y * y + p.z * z + p.w >= -1e-6)) return true;
         }
@@ -121,6 +129,19 @@ export class RoadCorridors {
     }
     /** Subtract convex volumes triangle by triangle, interpolating every custom vertex attribute. */
     cut(geometry: THREE.BufferGeometry, owner?: string, paint = false, tunnelsOnly = true): void {
+        const candidateGrid = tunnelsOnly && !paint ? this.tunnelGrid : this.grid;
+        geometry.computeBoundingBox();
+        const bounds = geometry.boundingBox;
+        if (!bounds || bounds.isEmpty()) return;
+        let intersects = false;
+        for (let x = Math.floor(bounds.min.x / 20); x <= Math.floor(bounds.max.x / 20) && !intersects; x++)
+            for (let z = Math.floor(bounds.min.z / 20); z <= Math.floor(bounds.max.z / 20) && !intersects; z++)
+                for (const volume of candidateGrid.at(x * 20 + 0.001, z * 20 + 0.001)) {
+                    if (volume.owner !== owner && bounds.max.x >= volume.minX - 0.2 && bounds.min.x <= volume.maxX + 0.2
+                        && bounds.max.z >= volume.minZ - 0.2 && bounds.min.z <= volume.maxZ + 0.2) { intersects = true; break; }
+                }
+        // Most building chunks do not touch a tunnel. Preserve their buffers intact.
+        if (!intersects) return;
         const attrs = Object.entries(geometry.attributes).filter(([name]) => name !== "normal");
         const offsets: number[] = [];
         let stride = 0;
@@ -190,7 +211,7 @@ export class RoadCorridors {
             const candidates = new Set<Volume>();
             for (let x = Math.floor(minX / 20); x <= Math.floor(maxX / 20); x++)
                 for (let z = Math.floor(minZ / 20); z <= Math.floor(maxZ / 20); z++)
-                    for (const v of this.grid.at(x * 20 + 0.001, z * 20 + 0.001)) {
+                    for (const v of candidateGrid.at(x * 20 + 0.001, z * 20 + 0.001)) {
                         if (
                             v.owner === owner ||
                             (!paint && tunnelsOnly && !v.tunnel) ||

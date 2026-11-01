@@ -188,6 +188,11 @@ export class RoadProfile {
     /** Returns the maximum plan-view endpoint blend distance allowed by this road's length. */
     horizontalJoinReach(): number { return this.horizontalLength * 0.3; }
 
+    private generationSamples: Map<number, Map<number, RoadContact>> | null = null;
+    /** Enables a short-lived exact-coordinate cache while static geometry is generated. */
+    setGenerationCaching(enabled: boolean): void {
+        this.generationSamples = enabled ? new Map() : null;
+    }
     private grid = new SpatialGrid<Segment>();
     private segments: Segment[] = [];
     /**
@@ -262,18 +267,22 @@ export class RoadProfile {
      * @param z - Local southward coordinate in metres.
      */
     sample(x: number, z: number): RoadContact {
+        const cached = this.generationSamples?.get(x)?.get(z);
+        if (cached) return { ...cached };
         let best: Segment | undefined,
             distance = Infinity,
             along = 0;
-        const nearby = [...this.grid.at(x, z)];
-        for (const segment of nearby.length ? nearby : this.segments) {
-            const q = closestPoint({ x, z }, segment.a, segment.b),
-                d = Math.hypot(q.x - x, q.z - z);
+        const nearby = this.grid.at(x, z);
+        for (const segment of nearby instanceof Set && nearby.size ? nearby : this.segments) {
+            const dx = segment.b.x - segment.a.x, dz = segment.b.z - segment.a.z;
+            const fraction = Math.max(0, Math.min(1, ((x - segment.a.x) * dx + (z - segment.a.z) * dz) / (dx * dx + dz * dz || 1)));
+            const qx = segment.a.x + fraction * dx, qz = segment.a.z + fraction * dz;
+            const d = Math.hypot(qx - x, qz - z);
             if (d < distance) {
                 distance = d;
                 best = segment;
                 const length = Math.hypot(segment.b.x - segment.a.x, segment.b.z - segment.a.z);
-                along = length ? Math.hypot(q.x - segment.a.x, q.z - segment.a.z) / length : 0;
+                along = length ? Math.hypot(qx - segment.a.x, qz - segment.a.z) / length : 0;
             }
         }
         const ground = this.groundAt(x, z);
@@ -349,7 +358,7 @@ export class RoadProfile {
             : surface === "cobblestone"
               ? 0.8
               : 1;
-        return {
+        const result: RoadContact = {
             height,
             slopeX,
             slopeZ,
@@ -359,6 +368,12 @@ export class RoadProfile {
             roadId: this.input.id,
             ceiling: this.input.kind === "tunnel" ? height + this.headroom : undefined,
         };
+        if (this.generationSamples) {
+            let column = this.generationSamples.get(x);
+            if (!column) { column = new Map(); this.generationSamples.set(x, column); }
+            column.set(z, { ...result });
+        }
+        return result;
     }
 }
 
