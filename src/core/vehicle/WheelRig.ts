@@ -56,6 +56,7 @@ export function createWheelRig(model: THREE.Object3D, body: THREE.Object3D): {
         const steer = new THREE.Group(), wheel = new THREE.Group();
         steer.name = `wheel_${index}_steerPivot`;
         wheel.name = `wheel_${index}_spinPivot`;
+        wheel.userData.frontAxle = index >= 2;
         steer.position.copy(centre);
         steer.userData.baseQuat = steer.quaternion.clone();
         steer.add(wheel);

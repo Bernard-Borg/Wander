@@ -250,7 +250,7 @@ export class EngineSoundGenerator {
      * @param acceleration Current acceleration (0-1)
      * @param isAccelerating Whether the car is actively accelerating
      */
-    update(speed: number, acceleration: number, isAccelerating: boolean, delta = 1 / 60): void {
+    update(speed: number, acceleration: number, isAccelerating: boolean, delta = 1 / 60, engineRPM?: number): void {
         if (!this.isEnabled || !this.audioContext || !this.isPlaying) {
             // Auto-start if not playing and we should be
             if (this.isEnabled && isAccelerating && speed > 0.5) {
@@ -271,9 +271,12 @@ export class EngineSoundGenerator {
         // This makes the sound respond immediately to throttle input
 
         // Target RPM is based on speed, with additional boost when accelerating
-        const targetRPM = targetEngineRPM(speed, acceleration, this.config);
+        const targetRPM = engineRPM !== undefined && Number.isFinite(engineRPM)
+            ? Math.max(0, Math.min(this.MAX_RPM, engineRPM))
+            : targetEngineRPM(speed, acceleration, this.config);
 
         // Smooth RPM transition for realistic sound changes
+        if (engineRPM !== undefined && Number.isFinite(engineRPM)) this.currentRPM = targetRPM;
         const rpmChangeRate = this.config.rpmResponse * Math.min(delta, 0.1); // RPM change per frame (60fps = ~480 RPM/second)
         if (targetRPM > this.currentRPM) {
             this.currentRPM = Math.min(targetRPM, this.currentRPM + rpmChangeRate);

@@ -420,7 +420,7 @@ export class CarControls {
         const changingDirection = desiredDirection !== 0 && !this.directionEngaged;
         const handbrake = keys.brake || keys.handbrake;
         let targetThrottle = 0;
-        if (this.focused && !changingDirection && !opposingPedals && !handbrake) {
+        if (this.focused && !changingDirection) {
             if (keys.forward) {
                 targetThrottle = 1;
             } else if (keys.backward) {
@@ -437,7 +437,7 @@ export class CarControls {
         const throttleRate =
             targetThrottle > this.throttleInput ? this.throttleRiseRate : this.throttleFallRate;
         this.throttleInput =
-            targetBrake || handbrake
+            changingDirection
                 ? 0
                 : THREE.MathUtils.damp(this.throttleInput, targetThrottle, throttleRate, delta);
         this.brakeInput = targetBrake;
@@ -492,7 +492,7 @@ export class CarControls {
         const throttle = Math.abs(this.throttleInput);
         if (running) {
             this.engineSoundGenerator.start();
-            this.engineSoundGenerator.update(speed, throttle, throttle > 0.1, delta);
+            this.engineSoundGenerator.update(speed, throttle, throttle > 0.1, delta, this.car.getRPM());
         }
         if (impact > this.car.config.audio.impactThreshold && this.soundCooldown === 0) {
             this.roadSoundGenerator.playImpact(Math.min(1, impact / 45));

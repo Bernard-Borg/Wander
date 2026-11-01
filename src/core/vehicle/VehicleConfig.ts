@@ -118,6 +118,17 @@ export interface VehicleConfig {
         /** Base chase-camera distance from its vehicle target in metres. */
         distance: number;
     };
+    /** Optional independent crankshaft and slipping-clutch launch tuning. */
+    drivetrain?: {
+        /** Free-rev rise rate in RPM/s; defaults to audio.rpmResponse. */
+        revRise?: number;
+        /** RPM fall rate in RPM/s; defaults to 1.5 times audio.rpmResponse. */
+        revFall?: number;
+        /** Clutch/wheelspin recovery in inverse seconds; default 2.4. */
+        clutchEngagement?: number;
+        /** Maximum fractional drive boost from a raised-rev launch; default 0.25. */
+        launchBoost?: number;
+    };
     /** Synthesized engine, ignition and impact sound tuning. */
     audio: {
         /** Engine idle speed in revolutions per minute. */
@@ -240,12 +251,12 @@ export const DEFAULT_VEHICLE: VehicleConfig = {
     },
 };
 
-// 2020 Jeep Gladiator, 3.6 V6 Rubicon automatic in 2H. See docs/VEHICLE_TUNING.md.
+// 2020 Jeep Gladiator, 3.6 V6 Rubicon automatic in 2H.
 const JEEP_GLADIATOR: VehicleConfig = {
     id: "jeep-gladiator",
     name: "2020 Jeep Gladiator",
     model: {
-        path: "/models/jeep/jeep.gltf",
+        path: "/models/jeep/gladiator.gltf",
         length: 5.6,
         wheelRadius: 0.42,
         eye: [0.195, 0.27, 0.1],
@@ -313,7 +324,7 @@ const JEEP_GLADIATOR: VehicleConfig = {
     },
 };
 
-// 1976 VW Golf GTI MK1, 1.6 four-speed FWD. See docs/VEHICLE_TUNING.md.
+// 1976 VW Golf GTI MK1, 1.6 four-speed FWD.
 const VW_GOLF_MK1: VehicleConfig = {
     id: "vw-golf-mk1",
     name: "1976 VW Golf GTI MK1",
@@ -388,10 +399,104 @@ const VW_GOLF_MK1: VehicleConfig = {
     },
 };
 
+// 2022 Porsche 911 GT3 Touring (992)
+const PORSCHE_911: VehicleConfig = {
+    id: "porsche-911",
+    name: "2022 Porsche 911 GT3",
+    model: {
+        path: "/models/porsche/911.gltf",
+        length: 4.573,
+        wheelRadius: 0.355,
+        eye: [-0.19, 0.17, 0.12],
+        headlights: [0.32, 0.03, 0.46],
+        taillights: [0.4, 0.06, -0.48],
+    },
+    physics: {
+        maxSpeed: 318,
+        reverseSpeed: 35,
+        acceleration: 9.0,
+        hillClimbAssist: 0.85,
+        reverseAcceleration: 3.0,
+        brakeDeceleration: 12.0,
+        handbrakeDeceleration: 5.0,
+        wheelbase: 2.457,
+        maxSteeringAngle: 0.58,
+        mass: 1418,
+        frontWeight: 0.4,
+        centreOfMassHeight: 0.48,
+        yawInertia: 2600,
+        frontCornerStiffness: 115000,
+        rearCornerStiffness: 145000,
+        frontDriveFraction: 0,
+        brakeBias: 0.62,
+        steeringAssist: 1.0,
+        maxYawRate: 1.15,
+        cornerGrip: 9.81,
+        gripMultiplier: 1.15,
+        yawDamping: 5.0,
+        rollingResistance: 0.15,
+        engineResistance: 0.35,
+        drag: 0.00038,
+    },
+    collision: {
+        radius: 0.92,
+        halfLength: 1.36,
+        halfHeight: 0.64,
+    },
+    controls: {
+        throttleRise: 5.0,
+        throttleFall: 7.0,
+        steerRise: 12.0,
+        steerReturn: 16.0,
+    },
+    bodyMotion: {
+        rollGain: 0.0018,
+        pitchGain: 0.0015,
+        response: 10,
+    },
+    camera: {
+        followRate: 7,
+        terrainTiltRate: 9,
+        distance: 10,
+    },
+    drivetrain: {
+        revRise: 5500,
+        revFall: 6500,
+        clutchEngagement: 4.5,
+        launchBoost: 0.3,
+    },
+    audio: {
+        idleRPM: 900,
+        maxRPM: 9000,
+        baseFrequency: 30,
+        engineVolume: 2.0,
+        impactVolume: 0.75,
+        impactThreshold: 1.5,
+        ignitionDuration: 1.3,
+        gears: [0, 68, 105, 145, 185, 225, 270, 318],
+        harmonics: [
+            { ratio: 1, gain: 0.65, wave: "sawtooth" },
+            { ratio: 0.5, gain: 0.25, wave: "triangle" },
+            { ratio: 2, gain: 0.3, wave: "sawtooth" },
+            { ratio: 3, gain: 0.12, wave: "sine" },
+        ],
+        cylinders: 6,
+        pitchTracking: 0.95,
+        filterRange: [180, 1800],
+        saturation: 0.28,
+        rpmResponse: 5500,
+        hornFrequencies: [390, 490],
+        hornVolume: 0.12,
+        ignitionPitch: 1.1,
+        impactPitch: 0.85,
+    },
+};
+
 export const VEHICLES: Record<string, VehicleConfig> = {
     [DEFAULT_VEHICLE.id]: DEFAULT_VEHICLE,
     [JEEP_GLADIATOR.id]: JEEP_GLADIATOR,
     [VW_GOLF_MK1.id]: VW_GOLF_MK1,
+    [PORSCHE_911.id]: PORSCHE_911,
 };
 
 /**

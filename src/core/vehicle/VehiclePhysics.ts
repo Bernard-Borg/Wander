@@ -13,6 +13,10 @@ export interface VehicleInput {
     handbrake: boolean;
     parkingBrake?: boolean;
     grounded?: boolean;
+    /** Driven-wheel slip during a raised-rev clutch engagement, from zero to one. */
+    wheelspin?: number;
+    /** Bounded fractional launch-force increase while the clutch engages. */
+    launchBoost?: number;
 }
 
 export const FIXED_STEP = 1 / 120;
@@ -117,7 +121,11 @@ export class VehiclePhysics {
             (input.handbrake ? cfg.handbrakeDeceleration : cfg.brakeDeceleration) *
             surfaceGrip;
         // Never let a braking force reverse the vehicle in a single tick.
-        const longitudinal = engine - Math.sign(forward) * Math.min(speed / dt, brake + resistance);
+        const slip = clamp(input.wheelspin ?? 0, 0, 1);
+        const frontDriveShare = clamp(cfg.frontDriveFraction ?? 0, 0, 1);
+        const drivenLoad = frontDriveShare * cfg.frontWeight + (1 - frontDriveShare) * (1 - cfg.frontWeight);
+        const launch = slip > 0 ? Math.min(engine * (1 + slip * clamp(input.launchBoost ?? 0.25, 0, 0.5)), cfg.cornerGrip * surfaceGrip * drivenLoad) : engine;
+        const longitudinal = launch - Math.sign(forward) * Math.min(speed / dt, brake + resistance);
         const availableGrip = cfg.cornerGrip * surfaceGrip;
         // Full parking lock; at speed, keyboard lock asks for the available cornering
         // force instead of oversteering the front tyres far beyond useful slip angles.

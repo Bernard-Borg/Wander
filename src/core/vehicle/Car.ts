@@ -1,3 +1,4 @@
+import { EngineDrivetrain } from "./EngineDrivetrain";
 import { createWheelRig, createSteeringWheelRig } from "./WheelRig";
 /**
  * Car types and implementation for the city driving simulator.
@@ -9,7 +10,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VehiclePhysics } from "./VehiclePhysics";
 import type { CollisionWorld } from "../scene/CollisionWorld";
 import type { SurfaceSample } from "../scene/ElevationTerrain";
-import { DEFAULT_VEHICLE, targetEngineRPM } from "./VehicleConfig";
+import { DEFAULT_VEHICLE } from "./VehicleConfig";
 import type { VehicleConfig, EngineState } from "./VehicleConfig";
 
 /**
@@ -20,6 +21,7 @@ export class Car {
     private engineState: EngineState = "off";
     private ignitionRemaining = 0;
     private rpm = 0;
+    private drivetrain: EngineDrivetrain;
     private previousPosition = new THREE.Vector3();
     private previousRotation = new THREE.Quaternion();
     private renderPosition = new THREE.Vector3();
@@ -97,6 +99,7 @@ export class Car {
         readonly config: VehicleConfig = DEFAULT_VEHICLE,
     ) {
         this.physics = new VehiclePhysics(config.physics);
+        this.drivetrain = new EngineDrivetrain(config);
         this.rpm = 0;
         this.scene = scene;
         this.position = new THREE.Vector3(0, 0.25, 0);
@@ -270,6 +273,8 @@ export class Car {
             contact.height +
             this.groundOffset * Math.sqrt(1 + contact.slopeX ** 2 + contact.slopeZ ** 2);
         const grounded = this.position.y <= contactHeight + 0.001 && this.verticalVelocity <= 0;
+        this.drivetrain.update(delta, this.engineState, this.physics.forwardSpeed * 3.6, this.throttleInput,
+            this.brakeInput > 0.05 || this.handbrakeActive, grounded);
         this.physics.step(
             delta,
             {
@@ -279,6 +284,8 @@ export class Car {
                 handbrake: this.handbrakeActive,
                 parkingBrake: this.engineState !== "running",
                 grounded,
+                wheelspin: this.drivetrain.wheelspin,
+                launchBoost: this.config.drivetrain?.launchBoost ?? 0.25,
             },
             contact.grip,
             contact.slopeX,
@@ -338,13 +345,7 @@ export class Car {
                 this.bodyLean.y) *
             leanResponse;
         this.speed = this.physics.forwardSpeed * 3.6;
-        const targetRPM =
-            this.engineState === "running"
-                ? targetEngineRPM(this.speed, this.throttleInput, this.config.audio)
-                : this.engineState === "starting"
-                  ? 240
-                  : 0;
-        this.rpm += (targetRPM - this.rpm) * (1 - Math.exp(-7 * delta));
+        this.rpm = this.drivetrain.rpm;
         this.mesh.position.copy(this.position);
         this.mesh.quaternion.copy(this.rotation);
         const speedMps = this.speed / 3.6;
@@ -355,12 +356,13 @@ export class Car {
 
         // Animate wheels (rotate when moving)
         if (this.gltfWheelSpinMeshes.length > 0) {
-            if (Math.abs(this.speed) > 0.5) {
-                const wheelRotation = (-speedMps * delta) / this.config.model.wheelRadius;
-                this.gltfWheelSpinMeshes.forEach((wheelMesh) => {
-                    wheelMesh.rotateX(wheelRotation);
-                });
-            }
+            this.gltfWheelSpinMeshes.forEach(wheel => {
+                const front = wheel.userData.frontAxle === true;
+                const fraction = this.config.physics.frontDriveFraction ?? 0;
+                const driven = front ? fraction > 0 : fraction < 1;
+                const wheelSpeed = driven ? this.drivetrain.wheelSpeed : speedMps;
+                wheel.rotateX(-wheelSpeed * delta / this.config.model.wheelRadius);
+            });
             // Rotate front wheel pivots for steering
             if (this.gltfFrontWheelPivots.length > 0) {
                 const frontWheelAngle = this.physics.steeringAngle;
@@ -537,6 +539,7 @@ export class Car {
      * Reset car physics state (speed, steering, etc.)
      */
     resetPhysics(): void {
+        this.drivetrain.reset();
         this.physics.reset();
         this.bodyLean.set(0, 0);
         this.previousBodyLean.set(0, 0);
