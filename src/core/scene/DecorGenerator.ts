@@ -8,6 +8,7 @@ import { addMoaiParts } from "./Moai";
 import * as THREE from "three";
 import type { GeoJSON, GeoJSONFeature } from "@/types";
 import { CollisionWorld, type Point } from "./CollisionWorld";
+import { TrafficSigns } from "./TrafficSigns";
 import { BusStopSigns } from "./BusStopSigns";
 
 type Shape = "box" | "cylinder" | "sphere" | "cone";
@@ -19,6 +20,7 @@ export class DecorGenerator {
     private lastLightUpdate = -Infinity;
     private readonly lampColor = 0xffedc2;
     private group = new THREE.Group();
+    private trafficSigns = new TrafficSigns();
     private busStops = new BusStopSigns();
     private geometries: Record<Shape, THREE.BufferGeometry> = {
         box: new THREE.BoxGeometry(1, 1, 1),
@@ -51,6 +53,7 @@ export class DecorGenerator {
         this.group.name = "Street furniture";
         scene.add(this.group);
         scene.add(this.busStops.group);
+        scene.add(this.trafficSigns.group);
     }
     /**
      * Generates the supported OSM features using the supplied coordinate and elevation samplers.
@@ -65,6 +68,7 @@ export class DecorGenerator {
         project: (lat: number, lon: number) => Point,
         heightAt: (x: number, z: number, layer: number, wall: boolean) => number,
         contains: (x: number, z: number) => boolean,
+        countryCode: string | readonly string[] = [],
     ): void {
         this.clear();
         let generated = 0;
@@ -76,6 +80,9 @@ export class DecorGenerator {
         for (const feature of data.features) {
             const p = feature.properties,
                 g = feature.geometry;
+            // Underground hydrants have no above-ground body or collision obstacle.
+            if (p.emergency === "fire_hydrant"
+                && String(p["fire_hydrant:type"] ?? "").trim().toLowerCase() === "underground") continue;
             const isBusStop = p.highway === "bus_stop"
                 || ((p.public_transport === "platform" || p.highway === "platform") && p.bus === "yes");
             // Keep bus-stop signs, but omit other platform outlines and amenities.
@@ -322,7 +329,19 @@ export class DecorGenerator {
                 post(2.7);
                 add("box", metal, 0, 2.35, 0, 1.45, 0.75, 0.12);
                 this.busStops.add(p, pt.x, y, pt.z, yaw);
-            } else if (p.traffic_sign || amenity === "clock") {
+            } else if (p.traffic_sign) {
+                if (g.type !== "Point") continue;
+                const signDirection = osmDirection(p["traffic_sign:direction"]) ?? osmDirection(p.direction);
+                const facing = signDirection === undefined ? yaw : Math.PI - signDirection * Math.PI / 180;
+                const count = this.trafficSigns.add(p, countryCode, pt.x, y, pt.z, facing);
+                if (!count) continue;
+                const poleHeight = 2.6 + (count - 1) * 0.85;
+                // Keep the 7.5 cm pole behind the panel, using its actual facing.
+                this.part("cylinder", metal, pt.x - Math.sin(facing) * 0.065,
+                    y + poleHeight / 2, pt.z - Math.cos(facing) * 0.065,
+                    0.075, poleHeight, 0.075);
+                radius = 0.08;
+            } else if (amenity === "clock") {
                 post();
                 const board = false;
                 add("box", stone, 0, 2, 0, board ? 1.3 : 0.48, board ? 1 : 0.6, 0.1);
@@ -571,6 +590,7 @@ export class DecorGenerator {
         this.lastLightUpdate = -Infinity;
         for (const light of this.lampLights) light.intensity = 0;
         this.busStops.clear();
+        this.trafficSigns.clear();
         for (const child of this.group.children) (child as THREE.InstancedMesh).dispose();
         this.group.clear();
         this.batches.clear();
@@ -582,6 +602,8 @@ export class DecorGenerator {
         this.clear();
         for (const light of this.lampLights) { this.scene.remove(light); light.dispose(); }
         this.lampLights = [];
+        this.trafficSigns.dispose();
+        this.scene.remove(this.trafficSigns.group);
         this.busStops.dispose();
         this.scene.remove(this.busStops.group);
         Object.values(this.geometries).forEach((g) => g.dispose());

@@ -27,6 +27,8 @@ export interface CityConfig {
     name: string;
     /** Country displayed beneath the city name in map selection. */
     country: string;
+    /** Accepted traffic-sign code prefixes; multiple systems can coexist in a city export. */
+    country_code: string | readonly string[];
     file: string;
     centerLat: number;
     centerLon: number;
@@ -41,6 +43,7 @@ export const CITY_CONFIGS: Record<string, CityConfig> = {
     amsterdam: {
         name: "Amsterdam",
         country: "Netherlands",
+        country_code: "NL",
         file: "amsterdam.json",
         buildings: AMSTERDAM_BUILDINGS,
         elevation: { file: "Amsterdam.hgt", south: 52, west: 4 },
@@ -50,6 +53,7 @@ export const CITY_CONFIGS: Record<string, CityConfig> = {
     monaco: {
         name: "Monaco",
         country: "Monaco",
+        country_code: ["MC", "FR"],
         buildings: MONACO_BUILDINGS,
         file: "monaco.json",
         elevation: {
@@ -65,6 +69,7 @@ export const CITY_CONFIGS: Record<string, CityConfig> = {
     rabat: {
         name: "Rabat",
         country: "Malta",
+        country_code: "MT",
         buildings: MALTA_BUILDINGS,
         file: "rabat.json",
         elevation: {
@@ -81,6 +86,7 @@ export const CITY_CONFIGS: Record<string, CityConfig> = {
     vaduz: {
         name: "Vaduz",
         country: "Liechtenstein",
+        country_code: ["LI", "AT", "CH"],
         file: "vaduz.json",
         buildings: VADUZ_BUILDINGS,
         elevation: { file: "Vaduz.hgt", south: 47, west: 9 },
@@ -91,6 +97,7 @@ export const CITY_CONFIGS: Record<string, CityConfig> = {
     valletta: {
         name: "Valletta",
         country: "Malta",
+        country_code: "MT",
         buildings: MALTA_BUILDINGS,
         file: "valletta.json",
         elevation: { file: "Valletta.hgt", south: 35, west: 14 },
@@ -100,6 +107,7 @@ export const CITY_CONFIGS: Record<string, CityConfig> = {
     stockholm: {
         name: "Stockholm",
         country: "Sweden",
+        country_code: "SE",
         buildings: STOCKHOLM_BUILDINGS,
         file: "stockholm.json",
         elevation: { file: "Stockholm.hgt", south: 59, west: 18 },

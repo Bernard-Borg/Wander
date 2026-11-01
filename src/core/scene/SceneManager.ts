@@ -410,6 +410,7 @@ export class SceneManager {
                 return road.roadId ? road.height : ground;
             },
             (x, z) => !this.terrain || this.terrain.contains(x, z),
+            config.country_code,
         );
         await report(
             "Generating buildings and tunnel openings",
