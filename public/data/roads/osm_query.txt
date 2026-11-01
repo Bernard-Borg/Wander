@@ -1,6 +1,6 @@
 [out:json][timeout:90];
 (
-  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|service|steps|.*_link)$"]({{bbox}});
+  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|service|steps|pedestrian|.*_link)$"]({{bbox}});
 );
 out body;
 >;
