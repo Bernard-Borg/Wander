@@ -207,9 +207,12 @@ export class CollisionWorld {
             body.x = x;
             body.z = z;
         }
+        // Long bodies need closer-spaced circles to avoid thin obstacles slipping between contacts.
+        const halfSamples = Math.max(1, Math.ceil(shape.halfLength / Math.max(0.01, shape.radius * 1.5)));
         for (let pass = 0; pass < 6; pass++) {
             let moved = false;
-            for (const offset of [-shape.halfLength, 0, shape.halfLength]) {
+            for (let sample = -halfSamples; sample <= halfSamples; sample++) {
+                const offset = shape.halfLength * sample / halfSamples;
                 const p = {
                     x: body.x + Math.sin(body.yaw) * offset,
                     z: body.z + Math.cos(body.yaw) * offset,

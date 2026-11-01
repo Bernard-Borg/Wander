@@ -172,8 +172,9 @@ export class VehiclePhysics {
             const rearSlip = -Math.atan2(lateral - rearArm * this.yawRate, speed);
             const desiredForce = longitudinal * cfg.mass * gradeScale;
             const braking = longitudinal * forward < 0;
-            const frontDemand = braking ? desiredForce * cfg.brakeBias : 0;
-            const rearDemand = braking ? desiredForce * (1 - cfg.brakeBias) : desiredForce;
+            const frontDrive = clamp(cfg.frontDriveFraction ?? 0, 0, 1);
+            const frontDemand = braking ? desiredForce * cfg.brakeBias : desiredForce * frontDrive;
+            const rearDemand = braking ? desiredForce * (1 - cfg.brakeBias) : desiredForce * (1 - frontDrive);
             // ABS keeps a steering reserve under braking; traction control spends
             // remaining tyre capacity on drive rather than breaking rear grip.
             const frontReserve = Math.sqrt(
