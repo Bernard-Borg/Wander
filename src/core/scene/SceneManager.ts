@@ -774,7 +774,12 @@ export class SceneManager {
      * @param position - Local position or saved geographic position, as indicated by the parameter type.
      * @param force - Whether to bypass the normal refresh interval.
      */
+    /** Enables street-lamp illumination for the night preset. */
+    setNight(enabled: boolean): void { this.decor.setNight(enabled); }
+
+    /** Advances animated scenery and local visibility. */
     update(elapsed: number, position?: THREE.Vector3, force = false): void {
+        if (position) this.decor.updateLights(position, elapsed);
         this.water.update(elapsed);
         this.buildingGenerator.update(elapsed);
         if (position) this.visibility.update(position, elapsed, force);

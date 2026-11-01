@@ -20,6 +20,10 @@ export interface VehicleConfig {
         wheelRadius: number;
         /** Driver-eye offset [X, Y, Z] as fractions of the scaled model width, height and length; positive Z is forward. */
         eye: [number, number, number];
+        /** Symmetric headlamp position [half-spacing X, height Y, forward Z], as fractions of centred model bounds. */
+        headlights?: [number, number, number];
+        /** Symmetric rear-lamp position [half-spacing X, height Y, rear Z], as fractions of centred model bounds. */
+        taillights?: [number, number, number];
     };
     /** Parameters for the planar vehicle dynamics. */
     physics: {
@@ -168,6 +172,8 @@ export const DEFAULT_VEHICLE: VehicleConfig = {
         length: 2.6,
         wheelRadius: 0.4,
         eye: [-0.18, 0.24, 0.05],
+        headlights: [0.34, -0.12, 0.49],
+        taillights: [0.34, -0.04, -0.49],
     },
     physics: {
         maxSpeed: 200,
@@ -235,6 +241,8 @@ const JEEP_GLADIATOR: VehicleConfig = {
         length: 2.8,
         wheelRadius: 0.4,
         eye: [0.18, 0.24, 0.08],
+        headlights: [0.32, -0.03, 0.49],
+        taillights: [0.38, -0.13, -0.49],
     },
     physics: {
         maxSpeed: 180,
@@ -302,6 +310,8 @@ const VW_GOLF_MK1: VehicleConfig = {
         length: 2.5,
         wheelRadius: 0.35,
         eye: [0.18, 0.24, -0.08],
+        headlights: [0.32, -0.13, 0.49],
+        taillights: [0.35, -0.10, -0.49],
     },
     physics: {
         maxSpeed: 160,

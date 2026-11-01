@@ -65,6 +65,7 @@ export const useSimulatorStore = defineStore("simulator", () => {
             );
             instance.value = simulator;
             simulator.setGraphics(settings.shadowsEnabled, settings.renderScale);
+            simulator.setTimeOfDay(settings.timeOfDay);
             simulator.onVehicleUpdate((data) => {
                 if (operation === revision) Object.assign(state.vehicle, data);
             });
@@ -205,6 +206,12 @@ export const useSimulatorStore = defineStore("simulator", () => {
         }
     };
 
+    /** Cycles the persistent time preset and immediately updates the loaded world. */
+    const cycleTimeOfDay = (): void => {
+        settings.timeOfDay = settings.timeOfDay === "morning" ? "noon" : settings.timeOfDay === "noon" ? "night" : "morning";
+        active()?.setTimeOfDay(settings.timeOfDay);
+    };
+
     /** Applies the saved graphics preferences to the active renderer. */
     const applyGraphics = (): void =>
         active()?.setGraphics(settings.shadowsEnabled, settings.renderScale);
@@ -246,6 +253,7 @@ export const useSimulatorStore = defineStore("simulator", () => {
         searchLocations,
         teleport,
         switchVehicle,
+        cycleTimeOfDay,
         applyGraphics,
         applyTerrain,
         unlockTouchAudio,

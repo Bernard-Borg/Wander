@@ -233,14 +233,76 @@ See [Elevation](ELEVATION.md) for the Rabat/Monaco implementation, tile coverage
 
 ## Sky
 
-[ProceduralSky](../src/core/scene/ProceduralSky.ts) renders a camera-centred daytime
-sky with a blue zenith, pale horizon haze, a sun disc and slowly moving clouds.
-The sun direction also positions the scene's directional light; fog uses the
-same horizon colour. The sky follows driving and creative cameras, uses one draw
-call and four noise octaves, and requires no image downloads. Clouds are a distant
-visual layer without volumetric shadows or weather simulation. Sky geometry and
-material are released when the simulator is disposed.
+[ProceduralSky](../src/core/scene/ProceduralSky.ts) renders a camera-centred sky
+with a sun disc and moving procedural clouds. The icon beside Settings and Main
+Menu cycles **morning ? noon ? night**. It changes solar direction, sky/cloud
+colours, ambient and directional lighting, and matching horizon fog without
+reloading the city. The preference is saved locally and applied to subsequent map
+loads. Night hides the sun and retains low ambient illumination for navigation.
+The gameplay sky follows both driving and creative cameras; the main-menu diorama
+uses its own lighting. Clouds remain a distant visual layer without volumetric
+shadows or weather simulation. The sky uses one draw call and no image downloads.
 
+## Vehicle lights
+
+Press **L** while driving to toggle headlights and rear lights together, during
+day or night. Key repeat is ignored; paused dialogs, text inputs and Ctrl/Alt/Meta
+shortcuts do not toggle them. Ignition does not control this switch. Changing the
+time preset resets the manual choice: night enables lights, morning/noon disable
+them. Loading a map or switching cars also initializes lamps from the current time
+preset. Flying hides the car and its attached lights.
+
+### Identifying existing model lamps
+
+[Car](../src/core/vehicle/Car.ts) traverses the loaded model's meshes and inspects
+**material names**, not mesh names, texture pixels, OSM data or automatic visual
+recognition. Only Three.js MeshStandardMaterial instances (including its physical
+material subclass) matching the following rules are modified:
+
+| Lamp | Material-name rule | Current model examples |
+| --- | --- | --- |
+| Front | Exact name `light_glass`, case insensitive | NSX |
+| Front | Exact, case-sensitive `vM_LightGlassNormal_Clear_Low1` | Golf |
+| Rear | Regex `/^red_?glass(?:_\d+)?$/i` | NSX: `red_glass`, `red_glass_2`, `red_glass_3`; Jeep: `RED_GLASS` |
+| Rear | Exact, case-sensitive `vM_LightGlassNormal_OuterRed_Low1` | Golf |
+
+Matching materials receive a gentle emissive colour: warm white at intensity 0.7
+in front, red at 0.5 at the rear. Their original emissive colour/intensity are
+restored when switched off. A shared material is processed once; all meshes using
+that material will glow. Broad names such as Jeep's LightA/LightEmissiveA are not
+matched because they can cover multiple lamp/body sections. Thus the Jeep's front
+light source is invisible while its existing red rear glass can glow. Unmatched
+materials retain their original appearance. No additional oval lens meshes are
+created. A new model with different material names needs explicit matching rules
+before its existing glass can glow.
+
+### Beam placement and tuning
+
+Material identification only controls the visible lamp glass. Actual illumination
+comes from two spotlights and two red point lights, positioned independently using
+[VehicleConfig](../src/core/vehicle/VehicleConfig.ts):
+
+- `model.headlights` and `model.taillights` are symmetric placement tuples
+  `[half-spacing X, height Y, longitudinal Z]`, expressed as fractions of the
+  centred, scaled model width/height/length. Positive Z points forward. Each tuple
+  creates one lamp on each side; negative Y is below the model centre.
+- Defaults when omitted: front `[0.34, -0.12, 0.49]`, rear
+  `[0.35, -0.08, -0.49]`. Current cars override these values.
+- Headlight source adds 0.12 m forward to the configured location; its target is
+  offset 25 m forward, 3.5 m downward and 0.8 m outward. Each spotlight has intensity
+  6000, range 65 m, half-angle 30?, penumbra 0.65 and inverse-square decay.
+- Rear point lights add 0.1 m rearward, with intensity 2.5, range 3 m and
+  inverse-square decay. These are running lights, not brake/reverse indicators.
+- A subtle transparent additive cone (38 m long, half-angle 22.5?, maximum shader
+  alpha factor 0.012) suggests headlight haze. This is decorative geometry, not
+  volumetric scattering. Real surface illumination comes from the spotlights.
+
+Lights and cones follow the interpolated chassis pose, including steering direction,
+pitch and suspension lean. Neither front nor rear lights cast shadows, so obstacles
+do not block their illumination; this keeps the rendering cost lower. Light power,
+range, direction and haze constants currently live in the light creation method in
+[Car](../src/core/vehicle/Car.ts), not in vehicle configuration. Model alignment and
+perceived brightness should still be reviewed in-game.
 
 ## HUD visibility and manual recovery
 

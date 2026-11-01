@@ -12,6 +12,7 @@ const DRIVING_CONTROLS = [
     ["Q / E", "Nose down / up (airborne)"],
     ["I", "Ignition / park"],
     ["H (hold)", "Horn"],
+    ["L", "Light on / off"],
     ["R", "Radio on / off"],
     ["Delete", "Reset position when stuck"],
     ["V", "First / third person"],

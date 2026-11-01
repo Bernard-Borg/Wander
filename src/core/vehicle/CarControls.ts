@@ -199,6 +199,10 @@ export class CarControls {
             this.unlockAudio();
         }
         switch (e.key.toLowerCase()) {
+            case "l":
+                e.preventDefault();
+                if (!e.repeat) this.car.toggleLights();
+                break;
             case "h":
                 e.preventDefault();
                 this.unlockAudio();

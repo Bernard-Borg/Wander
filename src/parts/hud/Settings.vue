@@ -60,6 +60,20 @@ onUnmounted(() => {
     <button class="wander-secondary wander-button compact icon" aria-label="Back to main menu" title="Main menu" @click="simulator.returnToMenu()">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-7v-7h-4v7H3Z" /></svg>
     </button>
+    <button class="wander-secondary wander-button compact icon"
+        :aria-label="`Time of day: ${settings.timeOfDay}. Click to change.`"
+        :title="`Time of day: ${settings.timeOfDay} (click to cycle)`" @click="simulator.cycleTimeOfDay()">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <template v-if="settings.timeOfDay === 'morning'">
+                <path d="M2 18h20M3 21h18M6 15a6 6 0 0 1 12 0M12 2v3M3 7l2 2M21 7l-2 2M12 12V7m-3 3 3-3 3 3" />
+            </template>
+            <template v-else-if="settings.timeOfDay === 'noon'">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2" />
+            </template>
+            <path v-else d="M20 15a8 8 0 0 1-11-11 8.5 8.5 0 1 0 11 11Z" />
+        </svg>
+    </button>
     </div>
     <dialog
         ref="dialog"

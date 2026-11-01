@@ -5,6 +5,7 @@ import type { MapLocation } from "./LocationSearch";
  */
 
 import { FreeFlightControls } from "./FreeFlightControls";
+import type { TimeOfDay } from "./scene/ProceduralSky";
 import { ProceduralSky } from "./scene/ProceduralSky";
 import { useStateStore } from "@/stores/state";
 import { useLoadingStore } from "@/stores/loading";
@@ -49,6 +50,7 @@ export class DrivingSimulator {
     private renderer: THREE.WebGLRenderer;
     private sceneManager: SceneManager;
     private sky: ProceduralSky;
+    private timeOfDay: TimeOfDay = "noon";
     private sunlight: THREE.DirectionalLight | null = null;
     private car: Car | null = null;
     private carControls: CarControls | null = null;
@@ -167,6 +169,8 @@ export class DrivingSimulator {
             // Add fog for depth
             this.scene.fog = new THREE.Fog(ProceduralSky.horizonColor, 450, 1200);
 
+            this.setTimeOfDay(this.timeOfDay);
+
             // Load city map with saved position
             await this.sceneManager.loadCityMap(city, savedPosition);
             if (this.disposed) return;
@@ -177,6 +181,7 @@ export class DrivingSimulator {
             const startPosition = this.sceneManager.getStartPosition();
             this.car = new Car(this.scene, this.vehicleConfig);
             await this.car.ready;
+            this.car.setNightLighting(this.timeOfDay === "night");
             if (this.disposed) return;
             this.car.setWorld(this.sceneManager.collisions, (x, z, y) =>
                 this.sceneManager.getRoadState(x, z, y),
@@ -244,6 +249,7 @@ export class DrivingSimulator {
         let controls: CarControls | null = null;
         try {
             await replacement.ready;
+            replacement.setNightLighting(this.timeOfDay === "night");
             if (this.disposed || this.car !== previous) {
                 replacement.dispose();
                 return false;
@@ -796,6 +802,31 @@ export class DrivingSimulator {
         });
     }
 
+    /** Changes sky, sun, ambient illumination and fog without reloading the map. */
+    setTimeOfDay(time: TimeOfDay): void {
+        this.timeOfDay = time;
+        this.sky.setTimeOfDay(time);
+        this.sceneManager.setNight(time === "night");
+        this.car?.setNightLighting(time === "night");
+        const night = time === "night", morning = time === "morning";
+        this.scene.traverse(object => {
+            if (object instanceof THREE.AmbientLight) {
+                object.intensity = night ? 0.16 : 0.22;
+                object.color.set(night ? 0x8296c9 : 0xdbe9ff);
+            } else if (object instanceof THREE.HemisphereLight) {
+                object.intensity = night ? 0.3 : 0.65;
+                object.color.set(night ? 0x607cae : 0xc6e1ff);
+            }
+        });
+        if (this.sunlight) {
+            this.sunlight.intensity = night ? 0 : morning ? 1.65 : 2.4;
+            this.sunlight.color.set(morning ? 0xffc58e : 0xffebcf);
+        }
+        this.scene.fog?.color.copy(this.sky.getHorizonColor());
+        this.updateSunlight();
+        this.renderer.shadowMap.needsUpdate = true;
+    }
+
     /** Searches locations in the active city only. */
     searchLocations(query: string): MapLocation[] { return this.isLoaded ? this.sceneManager.searchLocations(query) : []; }
 
@@ -819,7 +850,7 @@ export class DrivingSimulator {
         const texel = 200 / this.sunlight.shadow.mapSize.width;
         const target = this.sunlight.target.position;
         target.copy(this.camera.position).divideScalar(texel).floor().multiplyScalar(texel);
-        this.sunlight.position.copy(target).addScaledVector(ProceduralSky.sunDirection, 375);
+        this.sunlight.position.copy(target).addScaledVector(this.sky.direction, 375);
         this.sunlight.target.updateMatrixWorld();
     }
 

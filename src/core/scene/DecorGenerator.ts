@@ -12,6 +12,11 @@ import { BusStopSigns } from "./BusStopSigns";
 type Shape = "box" | "cylinder" | "sphere" | "cone";
 /** Simple, recognizable street furniture, instanced by primitive/material and 200 m cell. */
 export class DecorGenerator {
+    private night = false;
+    private lampPositions: THREE.Vector3[] = [];
+    private lampLights: THREE.PointLight[] = [];
+    private lastLightUpdate = -Infinity;
+    private readonly lampColor = 0xffedc2;
     private group = new THREE.Group();
     private busStops = new BusStopSigns();
     private geometries: Record<Shape, THREE.BufferGeometry> = {
@@ -32,6 +37,14 @@ export class DecorGenerator {
         private scene: THREE.Scene,
         private collisions: CollisionWorld,
     ) {
+        // Keep a fixed light count: changing it recompiles every lit scene material.
+        for (let i = 0; i < 8; i++) {
+            const light = new THREE.PointLight(0xffdf9e, 0, 22, 2);
+            light.name = "Nearby street lamp";
+            light.castShadow = false;
+            this.lampLights.push(light);
+            scene.add(light);
+        }
         this.group.userData.cullDistance = 500;
         this.busStops.group.userData.cullDistance = 150;
         this.group.name = "Street furniture";
@@ -289,7 +302,7 @@ export class DecorGenerator {
                 add("box", metal, 0, h, 0.5, 0.12, 0.12, 1.1);
                 add(
                     "box",
-                    man === "surveillance" ? stone : 0xf2e2b5,
+                    p.highway === "street_lamp" ? this.lampColor : man === "surveillance" ? stone : 0xf2e2b5,
                     0,
                     h - 0.1,
                     1,
@@ -297,6 +310,8 @@ export class DecorGenerator {
                     0.16,
                     0.65,
                 );
+                if (p.highway === "street_lamp")
+                    this.lampPositions.push(new THREE.Vector3(pt.x + Math.sin(yaw), y + h - 0.25, pt.z + Math.cos(yaw)));
             } else if (isBusStop) {
                 post(2.7);
                 add("box", metal, 0, 2.35, 0, 1.45, 0.75, 0.12);
@@ -440,6 +455,8 @@ export class DecorGenerator {
                 material = new THREE.MeshStandardMaterial({
                     color: batch.color,
                     roughness: 0.85,
+                    emissive: batch.color === this.lampColor ? this.lampColor : 0x000000,
+                    emissiveIntensity: batch.color === this.lampColor && this.night ? 3 : 0,
                 });
                 this.materials.set(batch.color, material);
             }
@@ -520,7 +537,42 @@ export class DecorGenerator {
     /**
      * Clears generated content and cached lookup data so the instance can be reused.
      */
+    /** Switches lamp lenses and nearby illumination with the sky preset. */
+    setNight(enabled: boolean): void {
+        this.night = enabled;
+        const material = this.materials.get(this.lampColor);
+        if (material) material.emissiveIntensity = enabled ? 3 : 0;
+        this.lastLightUpdate = -Infinity;
+        for (const light of this.lampLights) light.intensity = 0;
+    }
+
+    /** Assigns a bounded pool of shadowless lights to the nearest lamps at four Hz. */
+    updateLights(position: THREE.Vector3, seconds: number): void {
+        if (!this.night || seconds - this.lastLightUpdate < 0.25) return;
+        this.lastLightUpdate = seconds;
+        const nearest: Array<{ position: THREE.Vector3; distance: number }> = [];
+        for (const lamp of this.lampPositions) {
+            const distance = lamp.distanceToSquared(position);
+            if (distance > 90 * 90) continue;
+            let index = nearest.findIndex(candidate => distance < candidate.distance);
+            if (index < 0) index = nearest.length;
+            if (index < this.lampLights.length) {
+                nearest.splice(index, 0, { position: lamp, distance });
+                if (nearest.length > this.lampLights.length) nearest.pop();
+            }
+        }
+        this.lampLights.forEach((light, index) => {
+            const lamp = nearest[index];
+            light.intensity = lamp ? 180 : 0;
+            if (lamp) light.position.copy(lamp.position);
+        });
+    }
+
+    /** Clears generated furniture and turns off the reusable lamp lights. */
     clear(): void {
+        this.lampPositions = [];
+        this.lastLightUpdate = -Infinity;
+        for (const light of this.lampLights) light.intensity = 0;
         this.busStops.clear();
         for (const child of this.group.children) (child as THREE.InstancedMesh).dispose();
         this.group.clear();
@@ -531,6 +583,8 @@ export class DecorGenerator {
      */
     dispose(): void {
         this.clear();
+        for (const light of this.lampLights) { this.scene.remove(light); light.dispose(); }
+        this.lampLights = [];
         this.busStops.dispose();
         this.scene.remove(this.busStops.group);
         Object.values(this.geometries).forEach((g) => g.dispose());

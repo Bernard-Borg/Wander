@@ -3,6 +3,7 @@
  * @packageDocumentation
  */
 
+import type { TimeOfDay } from "@/core/scene/ProceduralSky";
 import { useLocalStorage } from "@vueuse/core";
 import { defineStore } from "pinia";
 
@@ -26,9 +27,14 @@ export const useSettingsStore = defineStore("settings", () => {
     /** Bypasses detailed GeoTIFF terrain in favour of its configured HGT fallback. */
     const forceFallbackTerrain = useLocalStorage<boolean>("cityDrivingSim_forceFallbackTerrain", false);
 
+    /** Persistent sky and lighting preset. */
+    const timeOfDay = useLocalStorage<TimeOfDay>("cityDrivingSim_timeOfDay", "noon");
+    if (!["morning", "noon", "night"].includes(timeOfDay.value)) timeOfDay.value = "noon";
+
     const shadowsEnabled = useLocalStorage<boolean>("cityDrivingSim_shadows", true);
     const renderScale = useLocalStorage<number>("cityDrivingSim_renderScale", 2);
     return {
+        timeOfDay,
         engineVolume,
         effectsVolume,
         musicVolume,

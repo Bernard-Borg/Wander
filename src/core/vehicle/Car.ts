@@ -44,6 +44,10 @@ export class Car {
     private groundNormal = new THREE.Vector3(0, 1, 0);
     private impact = 0;
     private mesh: THREE.Group = new THREE.Group();
+    private lampMaterials: Array<{ material: THREE.MeshStandardMaterial; color: THREE.Color; intensity: number; rear: boolean }> = [];
+    private nightLights = new THREE.Group();
+    private vehicleLights: Array<THREE.SpotLight | THREE.PointLight> = [];
+    private nightLighting = false;
     private visualBody = new THREE.Group();
     private bodyLean = new THREE.Vector2();
     private previousBodyLean = new THREE.Vector2();
@@ -151,6 +155,20 @@ export class Car {
         );
 
         this.visualBody.add(model);
+        // Only dedicated lamp glass is safe to illuminate; shared body/texture atlases
+        // remain unchanged rather than making unrelated parts of the model glow.
+        const seen = new Set<THREE.Material>();
+        model.traverse(object => {
+            if (!(object instanceof THREE.Mesh)) return;
+            for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+                if (!(material instanceof THREE.MeshStandardMaterial) || seen.has(material)) continue;
+                seen.add(material);
+                const rear = /^red_?glass(?:_\d+)?$/i.test(material.name) || material.name === "vM_LightGlassNormal_OuterRed_Low1";
+                if (rear || /^light_glass$/i.test(material.name) || material.name === "vM_LightGlassNormal_Clear_Low1")
+                    this.lampMaterials.push({ material, color: material.emissive.clone(), intensity: material.emissiveIntensity, rear });
+            }
+        });
+        this.createNightLights(centeredSize);
         this.mesh.add(this.visualBody);
         this.mesh.position.copy(this.position);
 
@@ -165,6 +183,71 @@ export class Car {
         this.gltfWheelSpinMeshes = wheels.spin;
         this.gltfFrontWheelPivots = wheels.front;
         this.cabinSteeringWheels = createSteeringWheelRig(model, this.visualBody);
+    }
+
+    /** Builds model-scaled headlight beams and red rear lamps on the interpolated body. */
+    private createNightLights(size: THREE.Vector3): void {
+        const front = this.config.model.headlights ?? [0.34, -0.12, 0.49];
+        const rear = this.config.model.taillights ?? [0.35, -0.08, -0.49];
+        // A faint additive haze makes the beam visible in air; actual road lighting is
+        // still supplied by the spotlights, so it follows slopes and other surfaces.
+        const beamLength = 38;
+        const coneGeometry = new THREE.ConeGeometry(beamLength * Math.tan(Math.PI / 8), beamLength, 32, 1, true);
+        coneGeometry.translate(0, -beamLength / 2, 0);
+        coneGeometry.rotateX(-Math.PI / 2);
+        const coneMaterial = new THREE.ShaderMaterial({
+            transparent: true, depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending, toneMapped: false,
+            vertexShader: `varying vec2 beamUV;
+                void main() { beamUV = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+            fragmentShader: `varying vec2 beamUV;
+                void main() {
+                    float fade = pow(beamUV.y, 2.0) * (1.0 - smoothstep(0.92, 1.0, beamUV.y));
+                    gl_FragColor = vec4(1.0, 0.93, 0.76, fade * 0.012);
+                }`,
+        });
+        for (const side of [-1, 1]) {
+            const head = new THREE.Vector3(side * size.x * front[0], size.y * front[1], size.z * front[2]);
+            const tail = new THREE.Vector3(side * size.x * rear[0], size.y * rear[1], size.z * rear[2]);
+            const beam = new THREE.SpotLight(0xfff1d7, 6000, 65, Math.PI / 6, 0.65, 2);
+            beam.name = "Vehicle headlight";
+            beam.position.copy(head).add(new THREE.Vector3(0, 0, 0.12));
+            beam.target.position.copy(head).add(new THREE.Vector3(side * 0.8, -3.5, 25));
+            beam.castShadow = false;
+            const cone = new THREE.Mesh(coneGeometry, coneMaterial);
+            cone.name = "Headlight beam haze";
+            cone.position.copy(beam.position);
+            cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1),
+                beam.target.position.clone().sub(beam.position).normalize());
+            this.nightLights.add(cone);
+            const red = new THREE.PointLight(0xff1608, 2.5, 3, 2);
+            red.name = "Vehicle rear light";
+            red.position.copy(tail).add(new THREE.Vector3(0, 0, -0.1));
+            this.vehicleLights.push(beam, red);
+            this.nightLights.add(beam, beam.target, red);
+        }
+        this.nightLights.name = "Vehicle night lights";
+        this.visualBody.add(this.nightLights);
+        this.setNightLighting(this.nightLighting);
+    }
+
+    /** Manually toggles front and rear lamps until the next time-of-day change. */
+    toggleLights(): void {
+        this.setNightLighting(!this.nightLighting);
+    }
+
+    /** Sets front and rear lamps; time-of-day changes reset any manual override. */
+    setNightLighting(enabled: boolean): void {
+        this.nightLighting = enabled;
+        this.nightLights.visible = enabled;
+        for (const lamp of this.lampMaterials) {
+            lamp.material.emissive.copy(lamp.color);
+            lamp.material.emissiveIntensity = lamp.intensity;
+            if (enabled) {
+                lamp.material.emissive.set(lamp.rear ? 0xff0800 : 0xffefd4);
+                lamp.material.emissiveIntensity = lamp.rear ? 0.5 : 0.7;
+            }
+        }
     }
 
     /**
@@ -622,6 +705,8 @@ export class Car {
     dispose(): void {
         if (this.disposed) return;
         this.disposed = true;
+        this.vehicleLights.forEach(light => light.dispose());
+        this.vehicleLights = [];
         this.disposeModel(this.mesh);
         this.scene.remove(this.mesh);
     }

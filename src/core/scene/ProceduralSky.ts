@@ -5,10 +5,15 @@
 
 import * as THREE from "three";
 
-/** Camera-centred daytime sky: one draw call, no textures or volumetric ray marching. */
+/** Selectable sky and lighting preset. */
+export type TimeOfDay = "morning" | "noon" | "night";
+
+/** Camera-centred procedural sky: one draw call, no textures or volumetric ray marching. */
 export class ProceduralSky {
     static readonly sunDirection = new THREE.Vector3(200, 75, 100).normalize();
     static readonly horizonColor = new THREE.Color(0xc4ddeb);
+    /** Instance solar direction, shared with scene lighting. */
+    readonly direction = ProceduralSky.sunDirection.clone();
     private material = new THREE.ShaderMaterial({
         side: THREE.BackSide,
         depthWrite: false,
@@ -16,6 +21,7 @@ export class ProceduralSky {
         fog: false,
         uniforms: {
             skyTime: { value: 0 },
+            daylight: { value: 1 },
             sunDirection: { value: ProceduralSky.sunDirection.clone() },
             horizonColor: { value: ProceduralSky.horizonColor.clone() },
             zenithColor: { value: new THREE.Color(0x438bd1) },
@@ -29,7 +35,7 @@ export class ProceduralSky {
                 gl_Position = clip.xyww;
             }`,
         fragmentShader: `
-            uniform float skyTime;
+            uniform float skyTime, daylight;
             uniform vec3 sunDirection, horizonColor, zenithColor, cloudColor;
             varying vec3 skyDirection;
             float skyHash(vec2 p) {
@@ -55,8 +61,8 @@ export class ProceduralSky {
                 float altitude = max(direction.y, 0.0);
                 vec3 color = mix(horizonColor, zenithColor, pow(altitude, 0.55));
                 float alignment = max(dot(direction, sunDirection), 0.0);
-                color += vec3(1.0, 0.77, 0.43) * pow(alignment, 48.0) * 0.32;
-                color += vec3(1.0, 0.85, 0.60) * pow(alignment, 1200.0) * 0.45;
+                color += vec3(1.0, 0.77, 0.43) * pow(alignment, 48.0) * 0.32 * daylight;
+                color += vec3(1.0, 0.85, 0.60) * pow(alignment, 1200.0) * 0.45 * daylight;
                 float sunEdge = cos(0.009);
                 float sunAA = max(fwidth(alignment), 0.000001);
                 float disc = smoothstep(sunEdge - sunAA, sunEdge + sunAA, alignment);
@@ -71,7 +77,7 @@ export class ProceduralSky {
                 vec3 cloudLight = cloudColor * (0.74 + 0.26 * smoothstep(0.45, 0.75, sunward));
                 color = mix(color, cloudLight, coverage * 0.94);
                 // Thin cloud attenuates the disc without erasing it completely.
-                color = mix(color, vec3(3.0, 2.7, 2.0), disc * (1.0 - coverage * 0.75));
+                color = mix(color, vec3(3.0, 2.7, 2.0), disc * daylight * (1.0 - coverage * 0.75));
                 gl_FragColor = vec4(color, 1.0);
                 #include <tonemapping_fragment>
                 #include <colorspace_fragment>
@@ -97,6 +103,27 @@ export class ProceduralSky {
      * @param camera - Camera controlled or followed by this operation.
      * @param seconds - Animation time in seconds.
      */
+    /** Updates sky colours and solar direction without rebuilding geometry. */
+    setTimeOfDay(time: TimeOfDay): void {
+        const night = time === "night", morning = time === "morning";
+        if (night) this.direction.set(-160, -100, 80);
+        else if (morning) this.direction.set(200, 35, -100);
+        else this.direction.set(70, 220, 100);
+        this.direction.normalize();
+        const uniforms = this.material.uniforms;
+        uniforms.sunDirection.value.copy(this.direction);
+        uniforms.daylight.value = night ? 0 : 1;
+        uniforms.horizonColor.value.set(night ? 0x18263f : morning ? 0xe6b999 : 0xc4ddeb);
+        uniforms.zenithColor.value.set(night ? 0x050d21 : morning ? 0x7298be : 0x438bd1);
+        uniforms.cloudColor.value.set(night ? 0x25324a : morning ? 0xffdfbd : 0xf9fbff);
+    }
+
+    /** Returns the horizon colour for matching scene fog. */
+    getHorizonColor(): THREE.Color {
+        return this.material.uniforms.horizonColor.value;
+    }
+
+    /** Centres the sky on the camera and advances cloud animation. */
     update(camera: THREE.Camera, seconds: number): void {
         this.mesh.position.copy(camera.position);
         this.material.uniforms.skyTime.value = seconds;
