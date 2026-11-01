@@ -208,7 +208,7 @@ export class RailwayGenerator {
                 train.velocity = THREE.MathUtils.damp(train.velocity, target, 0.65, dt);
                 const step = Math.min(Math.max(0, remaining), train.velocity * dt);
                 train.distance += step * train.direction;
-                if (remaining - step <= 0.05) { train.wait = Math.max(1, this.config?.turnaroundSeconds ?? 150); train.velocity = 0; }
+                if (remaining - step <= 0.05) { train.wait = Math.max(1, this.config?.turnaroundSeconds ?? 15); train.velocity = 0; }
             }
         }
         this.placeTrains();

@@ -17,7 +17,7 @@ railways: {
     trains: 3,                        // city-wide maximum (bounded to 0–6)
     carriages: 4,                     // 2–5 per consist
     maxSpeedKmh: 80,                   // city-wide maximum; brakes before route ends
-    turnaroundSeconds: 150,           // default 2.5 minutes at each endpoint
+    turnaroundSeconds: 15,            // default 15 seconds at each endpoint
 }
 ```
 

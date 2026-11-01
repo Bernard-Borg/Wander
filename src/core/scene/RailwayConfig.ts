@@ -16,7 +16,7 @@ export interface RailwayConfig {
     maxSpeedKmh?: number;
     /** Legacy maximum in metres per second. @deprecated Use maxSpeedKmh. */
     speed?: number;
-    /** Seconds stopped at each route end before returning, default 150. */
+    /** Seconds stopped at each route end before returning, default 15. */
     turnaroundSeconds?: number;
 }
 
