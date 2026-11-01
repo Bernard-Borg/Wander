@@ -3,8 +3,6 @@
 (
   // WALLS, FENCES & BOUNDARIES
   nwr["barrier"]({{bbox}});
-  nwr["historic"="citywalls"]({{bbox}});
-  nwr["man_made"~"^(embankment|cutting)$"]({{bbox}});
 
   // STREET FURNITURE
   nwr["amenity"~"^(bench|waste_basket|recycling|post_box|telephone|drinking_water|parking_meter|clock|fountain|bicycle_parking|grit_bin)$"]({{bbox}});
@@ -19,20 +17,18 @@
 
   // SIGNS & INFORMATION
   nwr["traffic_sign"]({{bbox}});
-  nwr["information"~"^(board|map|guidepost|sign|route_marker)$"]({{bbox}});
-  nwr["advertising"]({{bbox}});
 
-  // MONUMENTS & DECORATIONS
-  nwr["historic"~"^(memorial|monument|wayside_cross|wayside_shrine|boundary_stone)$"]({{bbox}});
-  nwr["tourism"="artwork"]({{bbox}});
+  // Decorations DECORATIONS
   nwr["man_made"="flagpole"]({{bbox}});
 
   // INFRASTRUCTURE DETAILS
-  nwr["man_made"~"^(mast|tower|water_tower|storage_tank|surveillance|street_cabinet|utility_pole)$"]({{bbox}});
-  nwr["power"~"^(pole|tower|transformer)$"]({{bbox}});
+  nwr["man_made"~"^(tower|water_tower|storage_tank|surveillance)$"]({{bbox}});
   nwr["emergency"="fire_hydrant"]({{bbox}});
-);
+)->.features;
 
-out body;
+// Exclude anything tagged building=*
+nwr.features["building"!~"."]->.features;
+
+.features out body;
 >;
 out skel qt;

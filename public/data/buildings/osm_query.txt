@@ -2,12 +2,10 @@
 
 (
   // BUILDING FOOTPRINTS
-  way["building"]({{bbox}});
-  relation["building"]({{bbox}});
+  wr["building"]({{bbox}});
 
   // BUILDING PARTS (for detailed 3D geometry)
-  way["building:part"]({{bbox}});
-  relation["building:part"]({{bbox}});
+  wr["building:part"]({{bbox}});
 );
 
 out body;
