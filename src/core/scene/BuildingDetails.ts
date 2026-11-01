@@ -28,8 +28,10 @@ export class BuildingDetails {
         const hospital = kind === "hospital" || tags.amenity === "hospital";
         const toilets = kind === "toilets" || tags.amenity === "toilets";
         const windmill = kind === "windmill" || tags.man_made === "windmill";
-        const namedTourism = ["museum", "hotel", "hostel"].includes(String(tags.tourism))
-            && typeof tags.name === "string" && tags.name.trim().length > 0;
+        const namedTourism =
+            ["museum", "hotel", "hostel"].includes(String(tags.tourism)) &&
+            typeof tags.name === "string" &&
+            tags.name.trim().length > 0;
         if (!(kiosk || market || hospital || toilets || windmill || namedTourism)) return;
         let area = 0;
         ring.forEach((a, i) => {
@@ -78,25 +80,45 @@ export class BuildingDetails {
         if (hospital) {
             // One solid, extruded cross silhouette; no font glyph or textured plane.
             const width = Math.max(0.1, Math.min(3, length * 0.6, height * 0.5));
-            const outer = width / 2, arm = width / 6;
+            const outer = width / 2,
+                arm = width / 6;
             const outline = new THREE.Shape();
             outline.moveTo(-arm, outer);
-            for (const [x, y] of [[arm, outer], [arm, arm], [outer, arm],
-                [outer, -arm], [arm, -arm], [arm, -outer], [-arm, -outer],
-                [-arm, -arm], [-outer, -arm], [-outer, arm], [-arm, arm]])
+            for (const [x, y] of [
+                [arm, outer],
+                [arm, arm],
+                [outer, arm],
+                [outer, -arm],
+                [arm, -arm],
+                [arm, -outer],
+                [-arm, -outer],
+                [-arm, -arm],
+                [-outer, -arm],
+                [-outer, arm],
+                [-arm, arm],
+            ])
                 outline.lineTo(x!, y!);
             outline.closePath();
             const red = new THREE.MeshStandardMaterial({ color: 0xdf2424, roughness: 0.65 });
             this.resources.push(red);
-            const cross = new THREE.Mesh(new THREE.ExtrudeGeometry(outline, {
-                depth: Math.min(0.18, width * 0.06), bevelEnabled: false, steps: 1,
-            }), red);
+            const cross = new THREE.Mesh(
+                new THREE.ExtrudeGeometry(outline, {
+                    depth: Math.min(0.18, width * 0.06),
+                    bevelEnabled: false,
+                    steps: 1,
+                }),
+                red,
+            );
             cross.name = "Hospital red cross";
             cross.position.set(0, Math.min(height - outer, Math.max(outer, height * 0.7)), 0.12);
             cross.castShadow = cross.receiveShadow = true;
             group.add(cross);
         }
-        const text = hospital ? "" : toilets ? "WC  ?  ? / ?" : String(namedTourism ? tags.name : tags.name ?? tags.brand ?? "");
+        const text = hospital
+            ? ""
+            : toilets
+              ? "WC  ♂ / ♀"
+              : String(namedTourism ? tags.name : (tags.name ?? tags.brand ?? ""));
         if (text) {
             const canvas = document.createElement("canvas");
             canvas.width = 1024;
@@ -123,16 +145,9 @@ export class BuildingDetails {
             });
             this.resources.push(signMaterial);
             const width = Math.min(6, length * 0.85);
-            const sign = new THREE.Mesh(
-                new THREE.PlaneGeometry(width, width / 4),
-                signMaterial,
-            );
+            const sign = new THREE.Mesh(new THREE.PlaneGeometry(width, width / 4), signMaterial);
             sign.name = `Building placard: ${text}`;
-            sign.position.set(
-                0,
-                Math.max(0.5, Math.min(height - 0.5, 2.7)),
-                0.22,
-            );
+            sign.position.set(0, Math.max(0.5, Math.min(height - 0.5, 2.7)), 0.22);
             group.add(sign);
         }
         if (market && length > 3) {

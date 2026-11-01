@@ -48,6 +48,17 @@ export interface HgtElevationConfig {
     west: number;
 }
 
+/** Adjacent HGT tiles exposed as one rectangular elevation source. */
+export interface HgtMosaicConfig {
+    /** Selects the existing HGT decoder for every tile. */
+    format: "hgt";
+    /** Complete rectangular tile grid; each tile declares its own southwest corner. */
+    tiles: readonly HgtElevationConfig[];
+}
+
+/** Single-tile and multi-tile HGT configurations accepted by loaders and TIFF fallbacks. */
+export type HgtElevationSource = HgtElevationConfig | HgtMosaicConfig;
+
 /** GeoTIFF configuration, including explicit projection and missing-data policy. */
 export interface TiffElevationConfig {
     /** Selects the GeoTIFF loader. */
@@ -61,11 +72,11 @@ export interface TiffElevationConfig {
     /** Optional 0?4 binomial filter passes over the shared height grid to soften quantized sources. */
     smoothingPasses?: number;
     /** Optional HGT coverage for missing or out-of-bounds raster samples. */
-    fallback?: HgtElevationConfig;
+    fallback?: HgtElevationSource;
 }
 
 /** Discriminated source configuration shared by city loading. */
-export type ElevationSource = HgtElevationConfig | TiffElevationConfig;
+export type ElevationSource = HgtElevationSource | TiffElevationConfig;
 
 /** NASA HGT: signed big-endian metres, rows from north to south, one degree per tile. */
 export class HgtTile implements ElevationSampler {

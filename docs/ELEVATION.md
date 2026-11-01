@@ -274,3 +274,43 @@ Each city can set `groundColor` to a CSS colour in `CITY_CONFIGS`, for example
 Terrain and natural ground cover blend to white between 2,490 and 2,500 metres
 above sea level, overriding their base colours at 2,500 m and above. This is
 material shading only: it adds no terrain vertices and does not change grip.
+
+## Multiple HGT tiles
+
+A city can combine neighbouring one-degree HGT tiles into one elevation sampler:
+
+```ts
+elevation: {
+    format: "hgt",
+    tiles: [
+        { file: "N46E007_Interlaken_2.hgt", south: 46, west: 7 },
+        { file: "N46E008_Interlaken_1.hgt", south: 46, west: 8 },
+    ],
+}
+```
+
+Tile coordinates come from their geographic prefixes: `N46E007` means southwest
+corner 46° N, 7° E. An arbitrary suffix such as `_1` does not affect placement.
+Files remain under `public/data/elevation/`. Tiles load concurrently, then
+[HgtMosaic](../src/core/scene/HgtMosaic.ts) implements the same `ElevationSampler`
+interface as `HgtTile` and `GeoTiffTile`. A GeoTIFF `fallback` also accepts this
+multi-tile configuration, including when the fallback-terrain setting is enabled.
+
+The combined bounds cover the whole tile grid. Coordinate sampling selects the
+appropriate native HGT tile; its decoder, bilinear interpolation and NoData
+handling remain unchanged. Shared boundaries consistently use the eastern or
+northern tile, and the outside north/east edges remain sampleable. Existing
+single-file HGT configurations and their default 20 m terrain mesh are unchanged.
+There is no additional merged raster allocation or per-frame tile loading.
+
+Supply a complete rectangular grid of adjacent tiles: one row, one column or a
+filled two-dimensional grid. Empty lists, duplicate locations, invalid geographic
+corners and grids with missing tiles are rejected before terrain construction.
+Irregular/L-shaped coverage and maps crossing the antimeridian are not supported.
+
+Interlaken uses both supplied tiles. All 65,569 road coordinates are covered; all
+3,601 sample pairs along the shared 8° E boundary match exactly. Temporary checks
+also covered outer borders, 2D mosaics, negative coordinates, invalid grids and
+unchanged native sampling. Its generated height field is 1,328 × 1,310 vertices
+at approximately 20 m spacing. Data from different surveys can still disagree at
+a tile boundary: the mosaic does not smooth or correct source-datum differences.

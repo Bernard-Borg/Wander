@@ -1,3 +1,5 @@
+import { HgtMosaic } from "./HgtMosaic";
+import { RailwayGenerator } from "./RailwayGenerator";
 import { applyAltitudeSnow } from "./TerrainMaterial";
 import { parseCoordinates, type MapLocation } from "../LocationSearch";
 /**
@@ -12,7 +14,7 @@ import { CollisionWorld } from "./CollisionWorld";
 import { RoadGenerator, ROAD_HEIGHT } from "./RoadGenerator";
 import { TreeGenerator } from "./TreeGenerator";
 import { BuildingGenerator } from "./BuildingGenerator";
-import type { TerrainBounds, ElevationSampler } from "./ElevationTerrain";
+import type { TerrainBounds, ElevationSampler, HgtElevationConfig, HgtElevationSource } from "./ElevationTerrain";
 import { ElevationTerrain, HgtTile } from "./ElevationTerrain";
 import { WaterGenerator } from "./WaterGenerator";
 import { NaturalGenerator } from "./NaturalGenerator";
@@ -47,6 +49,7 @@ export class SceneManager {
     private water: WaterGenerator;
     private natural: NaturalGenerator;
     private decor: DecorGenerator;
+    private railway: RailwayGenerator;
 
     /**
      * Initializes instance state and owned resources using the supplied dependencies.
@@ -59,12 +62,14 @@ export class SceneManager {
         this.treeGenerator = new TreeGenerator(scene);
         this.buildingGenerator = new BuildingGenerator(scene, this.collisions);
         this.buildingGenerator.setGeometryCutter((geometry) =>
-            this.roadGenerator.cutSceneryGeometry(geometry),
+            { this.roadGenerator.cutSceneryGeometry(geometry); this.railway.corridors.cut(geometry); },
         );
         this.water = new WaterGenerator(scene);
         this.natural = new NaturalGenerator(scene);
         this.decor = new DecorGenerator(scene, this.collisions);
         this.sceneryRoots = scene.children.filter((object) => !existing.has(object));
+        this.railway = new RailwayGenerator(scene, this.collisions);
+        this.sceneryRoots.push(this.railway.tracks);
         this.startPosition = new THREE.Vector3(0, ROAD_HEIGHT + 0.4, 0);
     }
 
@@ -169,13 +174,18 @@ export class SceneManager {
             ? configuredElevation.fallback ?? configuredElevation
             : configuredElevation;
         if (elevation) {
-            await report("Loading elevation data", elevation.file);
+            await report("Loading elevation data", "tiles" in elevation ? elevation.tiles.map(tile => tile.file).join(", ") : elevation.file);
             /** Loads a legacy HGT asset without changing its decoding or interpolation. */
-            const loadHgt = async (source: { file: string; south: number; west: number }) => {
+            const loadHgtTile = async (source: HgtElevationConfig) => {
                 const response = await fetch(`/data/elevation/${source.file}`, { signal: AbortSignal.timeout(60000) });
                 if (!response.ok) throw new Error(`Failed to load elevation ${source.file}: ${response.status}`);
                 return new HgtTile(await response.arrayBuffer(), source.south, source.west);
             };
+            /** Loads one native tile or combines adjacent tiles behind the common sampler interface. */
+            const loadHgt = async (source: HgtElevationSource): Promise<ElevationSampler> =>
+                "tiles" in source
+                    ? new HgtMosaic(await Promise.all(source.tiles.map(loadHgtTile)))
+                    : loadHgtTile(source);
             if (elevation.format === "geotiff") {
                 const { GeoTiffTile } = await import("./GeoTiffTile");
                 const fallback = elevation.fallback ? await loadHgt(elevation.fallback) : undefined;
@@ -247,10 +257,11 @@ export class SceneManager {
                 this.flatBounds,
             );
         await report("Loading scenery data", "Nature, buildings and street furniture");
-        const [naturalData, buildingData, decorData] = await Promise.all([
+        const [naturalData, buildingData, decorData, railData] = await Promise.all([
             this.optionalData(`/data/natural/${config.file}`),
             this.optionalData(`/data/buildings/${config.file}`),
             this.optionalData(`/data/decor/${config.file}`),
+            config.railways ? this.optionalData(`/data/rail/${config.file}`) : Promise.resolve(null),
         ]);
         if (this.disposed) return;
         /**
@@ -315,9 +326,14 @@ export class SceneManager {
             roadLevels,
             (message, detail) => report(message, detail),
         );
-        this.collisions.setTunnelQuery((x, z, y) => this.roadGenerator.isInTunnel(x, z, y));
+        if (railData && config.railways) {
+            await report("Generating railways");
+            await this.railway.generate(railData, project, this.terrain, config.railways,
+                (x, z, y) => this.roadGenerator.getRoadState(x, z, y), report);
+        }
+        this.collisions.setTunnelQuery((x, z, y) => this.roadGenerator.isInTunnel(x, z, y) || this.railway.corridors.contains(x, z, y));
         this.collisions.setRoadOpeningQuery((x, z, y, owner, tunnelsOnly) =>
-            this.roadGenerator.isTunnelOpening(x, z, y, owner, tunnelsOnly),
+            this.roadGenerator.isTunnelOpening(x, z, y, owner, tunnelsOnly) || this.railway.corridors.contains(x, z, y, owner),
         );
         this.collisions.setBounds(this.elevationTile ? (this.terrain?.bounds ?? null) : null);
         if (!this.roadGenerator.getRoads().length)
@@ -328,6 +344,7 @@ export class SceneManager {
             await report("Generating parks and beaches");
             this.natural.generate(naturalData, project, this.terrain, (geometry) => {
                 this.roadGenerator.cutTerrainGeometry(geometry);
+                this.railway.cutTerrain(geometry);
                 this.water.cutTerrain(geometry, sample);
             });
             await report("Generating trees");
@@ -471,6 +488,7 @@ export class SceneManager {
         this.water.clear();
         this.natural.clear();
         this.decor.clear();
+        this.railway.clear();
         this.collisions.clear();
         if (this.groundGroup) {
             this.groundGroup.traverse((object) => {
@@ -561,6 +579,7 @@ export class SceneManager {
                 geometry.translate((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
                 if (cut) {
                     this.roadGenerator.cutTerrainGeometry(geometry);
+                this.railway.cutTerrain(geometry);
                     this.water.cutTerrain(geometry, () => ({
                         height: 0,
                         slopeX: 0,
@@ -636,6 +655,7 @@ export class SceneManager {
                 geometry.setIndex(indices);
                 const originalPosition = geometry.getAttribute("position");
                 this.roadGenerator.cutTerrainGeometry(geometry);
+                this.railway.cutTerrain(geometry);
                 this.water.cutTerrain(geometry, (x, z) => terrain.sample(x, z));
                 if (geometry.getAttribute("position") !== originalPosition) {
                     // Reuse the sampled normal field after topology changes; computing
@@ -735,7 +755,7 @@ export class SceneManager {
      * @param y - Local elevation in metres.
      */
     getRoadState(x: number, z: number, y: number) {
-        return this.roadGenerator.getRoadState(x, z, y);
+        return this.railway.contact(x, z, y, this.roadGenerator.getRoadState(x, z, y));
     }
 
     /**
@@ -780,7 +800,9 @@ export class SceneManager {
     setNight(enabled: boolean): void { this.decor.setNight(enabled); }
 
     /** Advances animated scenery and local visibility. */
-    update(elapsed: number, position?: THREE.Vector3, force = false): void {
+    update(elapsed: number, position?: THREE.Vector3, force = false, running = true, driving = true): void {
+        const settings = useSettingsStore();
+        this.railway.update(elapsed, position, running && !document.hidden, driving && !settings.isSoundMuted ? settings.effectsVolume : 0);
         if (position) this.decor.updateLights(position, elapsed);
         this.water.update(elapsed);
         this.buildingGenerator.update(elapsed);
@@ -799,6 +821,7 @@ export class SceneManager {
         this.water.dispose();
         this.natural.dispose();
         this.decor.dispose();
+        this.railway.dispose();
         this.terrain = null;
         this.elevationTile = null;
         this.roadGenerator.setTerrain(null);

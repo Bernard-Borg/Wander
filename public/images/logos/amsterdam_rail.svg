@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="154.73988mm"
+   height="60.445938mm"
+   viewBox="0 0 154.73988 60.445938"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.2 (ebf0e940d0, 2025-05-08)"
+   sodipodi:docname="Logo of Nederlandse Spoorwegen.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="1.4022722"
+     inkscape:cx="247.81209"
+     inkscape:cy="91.993554"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1">
+    <clipPath
+       id="clip-2">
+      <path
+         clip-rule="nonzero"
+         d="m 460.62891,771.82031 h 85.03906 v 33.21875 h -85.03906 z m 0,0"
+         id="path48" />
+    </clipPath>
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-17.605821,-106.62708)">
+    <g
+       clip-path="url(#clip-2)"
+       id="g124"
+       transform="matrix(1.8196331,0,0,1.8196331,-820.56979,-1297.8027)">
+      <path
+         fill-rule="nonzero"
+         fill="#003082"
+         fill-opacity="1"
+         d="m 497.80469,787.79297 c -1.67578,-1.65625 -3.98047,-2.67578 -6.52344,-2.67578 h -17.93359 l 6.64843,-6.64453 h 16.84766 c 0.72656,0.0117 1.37891,0.32031 1.85156,0.80078 l 9.79297,9.80859 c 1.67578,1.65234 3.98438,2.67578 6.52734,2.67578 h 17.94532 l -6.64453,6.64844 -16.85157,-0.008 c -0.72265,-0.008 -1.3789,-0.32032 -1.85156,-0.80469 z m 5.125,14.51172 c 1.67578,1.68359 3.98437,2.73437 6.54297,2.74609 h 19.58984 l 16.60547,-16.60937 -16.60547,-16.61329 h -9.39844 l 13.28906,13.29297 -17.93359,-0.004 c -0.71094,0 -1.36328,-0.28125 -1.83594,-0.73828 l -9.78125,-9.80469 c -1.67968,-1.6875 -3.99609,-2.73438 -6.55859,-2.75391 h -19.60156 l -16.61328,16.6211 16.61328,16.60937 h 9.39453 l -13.28906,-13.28906 h 17.9375 c 0.71093,0 1.35546,0.28125 1.83203,0.73828 z m 0,0"
+         id="path123" />
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,7 @@
+[out:json][timeout:180];
+(
+  way["railway"~"^(rail|subway)$"]({{bbox}});
+);
+out body;
+>;
+out skel qt;

@@ -1,3 +1,4 @@
+import type { RailwayConfig } from "@/core/scene/RailwayConfig";
 /**
  * City configuration and saved geographic vehicle positions.
  * @packageDocumentation
@@ -36,6 +37,8 @@ export interface CityConfig {
     buildings?: BuildingTheme;
     /** Base terrain CSS colour; snow overrides this at 2,500 m above sea level. */
     groundColor?: string;
+    /** Optional city-wide procedural train appearance and fleet settings. */
+    railways?: RailwayConfig;
 }
 
 // Available cities configuration
@@ -46,15 +49,59 @@ export const CITY_CONFIGS: Record<string, CityConfig> = {
         country_code: "NL",
         file: "amsterdam.json",
         buildings: AMSTERDAM_BUILDINGS,
+        railways: {
+            style: "modern",
+            primary: "#f5c52b",
+            accent: "#164a91",
+            logo: "/images/logos/amsterdam_rail.svg",
+            trains: 3,
+            carriages: 4,
+            maxSpeedKmh: 160,
+        },
         elevation: { file: "Amsterdam.hgt", south: 52, west: 4 },
         centerLat: 52.3731,
         centerLon: 4.8925,
+    },
+    interlaken: {
+        name: "Interlaken",
+        country: "Switzerland",
+        country_code: "CH",
+        file: "interlaken.json",
+        buildings: VADUZ_BUILDINGS,
+        groundColor: "#395431",
+        elevation: {
+            format: "hgt",
+            tiles: [
+                { file: "N46E007_Interlaken_1.hgt", south: 46, west: 7 },
+                { file: "N46E008_Interlaken_2.hgt", south: 46, west: 8 },
+            ],
+        },
+        railways: {
+            style: "modern",
+            primary: "#f1f2ed",
+            accent: "#db1c2b",
+            logo: "/images/logos/interlaken_rail.svg",
+            trains: 2,
+            carriages: 3,
+            maxSpeedKmh: 200,
+        },
+        centerLat: 46.6863,
+        centerLon: 7.8632,
     },
     monaco: {
         name: "Monaco",
         country: "Monaco",
         country_code: ["MC", "FR"],
         buildings: MONACO_BUILDINGS,
+        railways: {
+            style: "modern",
+            primary: "#f1f2ed",
+            accent: "#2873af",
+            logo: "/images/logos/monaco_rail.svg",
+            trains: 2,
+            carriages: 3,
+            maxSpeedKmh: 90,
+        },
         file: "monaco.json",
         elevation: {
             format: "geotiff",
@@ -93,6 +140,15 @@ export const CITY_CONFIGS: Record<string, CityConfig> = {
         centerLat: 47.141,
         centerLon: 9.5215,
         groundColor: "#395431",
+        railways: {
+            style: "modern",
+            primary: "#f1f2ed",
+            accent: "#2873af",
+            logo: "/images/logos/interlaken_rail.svg",
+            trains: 2,
+            carriages: 3,
+            maxSpeedKmh: 200,
+        },
     },
     valletta: {
         name: "Valletta",
@@ -109,6 +165,15 @@ export const CITY_CONFIGS: Record<string, CityConfig> = {
         country: "Sweden",
         country_code: "SE",
         buildings: STOCKHOLM_BUILDINGS,
+        railways: {
+            style: "modern",
+            primary: "#bdc4cb",
+            accent: "#2875b9",
+            logo: "/images/logos/stockholm_rail.svg",
+            trains: 3,
+            carriages: 3,
+            maxSpeedKmh: 200,
+        },
         file: "stockholm.json",
         elevation: { file: "Stockholm.hgt", south: 59, west: 18 },
         centerLat: 59.3253,

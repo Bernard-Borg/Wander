@@ -339,7 +339,7 @@ export class DrivingSimulator {
             if (this.flight?.enabled) {
                 this.physicsClock.reset();
                 if (!this.paused) this.flight.update(elapsed);
-                this.sceneManager.update(nowFrame / 1000, this.camera.position);
+                this.sceneManager.update(nowFrame / 1000, this.camera.position, false, !this.paused, false);
                 const coords = this.sceneManager.localToLatLon(
                     this.camera.position.x,
                     this.camera.position.z,
@@ -374,7 +374,7 @@ export class DrivingSimulator {
                     this.carControls.silenceAudio();
                 }
                 this.car.render(this.paused || document.hidden ? 1 : this.physicsClock.alpha);
-                this.sceneManager.update(nowFrame / 1000, this.car.getRenderPosition());
+                this.sceneManager.update(nowFrame / 1000, this.car.getRenderPosition(), false, !this.paused);
 
                 const carPosition = this.car.getRenderPosition();
                 const carQuaternion = this.car.getRenderRotation();

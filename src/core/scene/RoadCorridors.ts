@@ -8,6 +8,9 @@ import * as THREE from "three";
 import { SpatialGrid } from "./CollisionWorld";
 import type { RoadProfile } from "./RoadProfiles";
 
+/** Minimal shared corridor contract for road and railway profiles. */
+export type CorridorProfile = Pick<RoadProfile, "curve" | "headroom" | "halfWidthAt" | "setGenerationCaching"> & { input: Pick<RoadProfile["input"], "id" | "kind" | "sidewalks"> };
+
 type Plane = { x: number; y: number; z: number; w: number };
 interface Volume {
     owner: string;
@@ -36,7 +39,7 @@ export class RoadCorridors {
      *
      * @param profiles - Solved road profiles.
      */
-    build(profiles: RoadProfile[]): void {
+    build(profiles: CorridorProfile[]): void {
         this.clear();
         for (const profile of profiles) {
             profile.setGenerationCaching(true);
