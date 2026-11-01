@@ -78,6 +78,7 @@ off; pressing the accelerator starts the ignition automatically.
 | Q / E                | Nose down / up while airborne                                                                          |
 | I                    | Ignition / park                                                                |
 | H, held              | Horn                                                                           |
+| L                    | Headlights and rear lights on / off (day or night)                              |
 | V                    | Switch first-person / third-person view                                        |
 | Mouse drag           | Look around; first-person horizontal look is limited to 80 degrees either side |
 | Mouse wheel          | Third-person zoom                                                              |
@@ -216,3 +217,7 @@ Third-party assets and datasets retain their own licences. In particular, the
 bundled vehicle credits specify **CC BY-NC-SA 4.0**, including noncommercial and
 share-alike conditions for adaptations. Do not assume those assets share the same
 licence as application code.
+
+Time-of-day controls and model lamp identification are documented in
+[Driving: vehicle lights](docs/DRIVING.md#vehicle-lights). The top-left sky icon
+cycles morning, noon and night; changing time automatically resets vehicle lights.

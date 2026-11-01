@@ -35,11 +35,10 @@ vehicle grip or replace the existing road contact model.
 [DecorGenerator](../src/core/scene/DecorGenerator.ts) generates:
 
 - Benches, waste/recycling/grit bins, post boxes, drinking-water taps, hydrants,
-  cabinets, telephone/parking-meter blocks, and bicycle stands.
-- Bus-stop, traffic, information, advertising, and clock sign panels; shelters.
-- Street lamps, surveillance-camera poles, utility/power poles and towers,
-  masts, and flagpoles.
-- Fountain basins and simple jets, memorial plinths, and abstract artwork.
+  telephone/parking-meter blocks, and bicycle stands.
+- Bus-stop, traffic and clock sign panels; shelters.
+- Street lamps, directional surveillance cameras, utility poles and flagpoles.
+- Fountain basins and simple jets, memorial plinths and tagged statues/sculptures.
 - Walls, retaining walls, hedges, fences, chains, guardrails, kerbs, platform
   paving, embankment/cutting edges, bollards, blocks, gates, and barriers.
 - Individual shrubs from natural data.
@@ -53,13 +52,20 @@ sign text and clock faces are not reproduced. Gate booms are upright with posts
 beside the mapped opening; no unknown access state is interpreted as a closed road.
 Kerbs/platforms are visual paving; substantial obstacles participate in scenery
 collisions. Fences/chains use simplified solid collision strips. Long barriers
-are split into terrain-following segments. OSM height/width and numeric direction
+are split into terrain-following segments. OSM height/width and numeric or eight-point compass direction
 are respected within reasonable bounds. Furniture uses terrain height or the road
 surface under its mapped position; layer tags guide road-level selection. Terrain
 and estimated road levels cannot determine every retaining wall's actual height.
 
 Primitives share geometry/materials and are instanced in 200 metre spatial cells
-for frustum culling. Lamps have visible fixtures without per-lamp dynamic lights.
+for frustum culling. At night, features tagged `highway=street_lamp` have glowing warm-yellow fixtures.
+A fixed pool of eight shadowless point lights illuminates the nearest lamps within
+90 m of the driving car or creative camera. Assignment updates at most four times
+per second; each active light has intensity 180 and range 22 m. All mapped lamp
+heads can glow, but only the nearest eight cast light onto surfaces. Morning/noon
+disable both effects. Utility poles and surveillance fixtures do not become street
+lights. The fixed pool avoids creating thousands of lights or repeatedly changing
+the scene's light count. See [time of day and vehicle lighting](DRIVING.md#sky).
 City changes and disposal release generated meshes and instance resources.
 
 ## Verification
@@ -78,3 +84,41 @@ playing field and basic white pitch markings. The mapped outline determines the
 stand shape and orientation, while `height` controls the stand height (12 m by
 default). Collisions follow the stand rings, leaving the playing field open.
 These are generic stadiums, not reproductions of individual venues.
+
+## Tree model and height
+
+Trees now use [Low Poly Broadleaf Tree](../public/models/trees/broadleaved.gltf) by
+EliXO, instanced by source mesh/material in 200 m cells. Full node transforms are
+preserved before normalizing the model: its lowest vertex is placed on the terrain
+and its full vertical extent is scaled to the selected height. Width scales
+proportionally; rotation and fallback heights are deterministic for each tree ID.
+The model's buffer reference points to the supplied broadleaved.bin. Credits appear
+on the public attribution page under CC BY 4.0.
+
+Height selection, in priority order:
+
+1. Positive metric `height` (number or a value such as `13 m`).
+2. `height:range`: e.g. `9-12 m`, `4 to 4.99m`, or semicolon-separated endpoints.
+   A stable value is selected inside that range. `<6 m` uses 3?6 m;
+   `>24 m` uses 24?30 m (50?100% or 100?125% of the bound respectively).
+3. A stable value from 5?12 m when tags are absent or invalid.
+
+Tree rows use the same generator and retain their inherited tags. Source geometry
+and materials are shared across cells and released when the generator is disposed.
+
+## Directions and removed decor
+
+`direction` accepts numeric degrees and only N, NE, E, SE, S, SW, W, NW
+(case insensitive). North is negative local Z, east is positive X. Full words,
+compound expressions and other non-numeric strings are ignored.
+
+`man_made=surveillance` generates a small camera and supporting post only when
+`camera:direction`, or failing that `camera:angle`, supplies a supported bearing.
+The latter is treated as the bearing fallback requested by the game, not a
+field-of-view setting. Missing/invalid bearings generate nothing.
+
+The generator no longer interprets `information`, `advertising`,
+`man_made=street_cabinet/mast/tower`, `power=pole/tower` or `tourism` as decor.
+Other independently supported tags on the same feature can still generate furniture.
+Statues explicitly identified by artwork_type, memorial or historic remain supported.
+Named museum/hotel/hostel building signs are handled by the building generator.

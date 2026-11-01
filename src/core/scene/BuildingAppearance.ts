@@ -190,7 +190,7 @@ export function resolveBuildingAppearance(p: Tags, seed: number, theme: Building
         pick = (colors: string[], shift = 0) =>
             colors.length ? colors[(seed + shift) % colors.length] : "#d2c5aa";
     const smallWoodenHouse = ["allotment_house", "cabin", "hut"].includes(String(p.building));
-    const material = String(
+    const rawMaterial = String(
         p["building:material"] ??
             (smallWoodenHouse ? "wood" : p.building === "office" ? "glass" : undefined) ??
             (style === "church" || style === "ruins"
@@ -203,6 +203,7 @@ export function resolveBuildingAppearance(p: Tags, seed: number, theme: Building
                       ? "concrete"
                       : theme.wallMaterial),
     );
+    const material = rawMaterial.toLowerCase() === "timber" ? "wood" : rawMaterial.toLowerCase();
     const defaults: Record<BuildingStyle, number> = {
         home:
             theme.residentialLevels[0] +
@@ -248,7 +249,7 @@ export function resolveBuildingAppearance(p: Tags, seed: number, theme: Building
                     ? (theme.residentialRoofShape ?? "flat")
                     : "flat"),
     );
-    const roofMaterial = String(
+    const rawRoofMaterial = String(
         p["roof:material"] ??
             (style === "greenhouse"
                 ? "glass"
@@ -258,10 +259,11 @@ export function resolveBuildingAppearance(p: Tags, seed: number, theme: Building
                     ? "concrete"
                     : "roof_tiles"),
     );
+    const roofMaterial = rawRoofMaterial.toLowerCase() === "timber" ? "wood" : rawRoofMaterial.toLowerCase();
     const wallFallback =
         material === "brick"
             ? "#aa7057"
-            : material === "glass"
+            : ["glass", "mirror"].includes(material)
               ? "#83a9b1"
               : material === "metal"
                 ? "#a7adae"
@@ -367,6 +369,20 @@ export function createBuildingMaterials() {
             diffuseColor.rgb = mix(baseColor, diffuseColor.rgb, 1.0-smoothstep(0.15,0.9,max(fwidth(metre.x),fwidth(metre.y))));
         `,
         );
+        shader.fragmentShader = shader.fragmentShader.replace("#include <roughnessmap_fragment>",
+            "#include <roughnessmap_fragment>\nif (vFinish.x > 2.5 && vFinish.x < 3.5) roughnessFactor = 0.12;");
+        shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_end>",
+            `#include <lights_fragment_end>
+            if (vFinish.x > 2.5 && vFinish.x < 3.5) {
+                vec3 reflectionDirection = inverseTransformDirection(reflect(-normalize(vViewPosition), normal), viewMatrix);
+                vec3 skyTint = vec3(0.50, 0.68, 0.82);
+                #ifdef USE_FOG
+                    skyTint = fogColor;
+                #endif
+                vec3 reflectionColor = mix(vec3(0.055, 0.065, 0.055), skyTint, smoothstep(-0.12, 0.35, reflectionDirection.y));
+                float fresnel = 0.12 + 0.65 * pow(1.0 - max(dot(normalize(vViewPosition), normal), 0.0), 5.0);
+                reflectedLight.indirectSpecular += reflectionColor * fresnel;
+            }`);
         // Enable built-in UV varyings while the facade itself is generated mathematically.
     };
     const roof = new THREE.MeshStandardMaterial({
@@ -399,6 +415,24 @@ export function createBuildingMaterials() {
             else if(vRoofFinish>3.5) diffuseColor.rgb *= 0.88+0.12*sin(p.x*20.0+sin(p.y*2.0));
         `,
         );
+    };
+    const roofCompile = roof.onBeforeCompile;
+    roof.onBeforeCompile = (shader, renderer) => {
+        roofCompile.call(roof, shader, renderer);
+        shader.fragmentShader = shader.fragmentShader.replace("#include <roughnessmap_fragment>",
+            "#include <roughnessmap_fragment>\nif (vRoofFinish > 2.5 && vRoofFinish < 3.5) roughnessFactor = 0.12;");
+        shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_end>",
+            `#include <lights_fragment_end>
+            if (vRoofFinish > 2.5 && vRoofFinish < 3.5) {
+                vec3 reflectionDirection = inverseTransformDirection(reflect(-normalize(vViewPosition), normal), viewMatrix);
+                vec3 skyTint = vec3(0.50, 0.68, 0.82);
+                #ifdef USE_FOG
+                    skyTint = fogColor;
+                #endif
+                vec3 reflectionColor = mix(vec3(0.055, 0.065, 0.055), skyTint, smoothstep(-0.12, 0.35, reflectionDirection.y));
+                float fresnel = 0.12 + 0.65 * pow(1.0 - max(dot(normalize(vViewPosition), normal), 0.0), 5.0);
+                reflectedLight.indirectSpecular += reflectionColor * fresnel;
+            }`);
     };
     // A shared 1px white map enables Three's UV plumbing; detail needs no image assets.
     const map = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);

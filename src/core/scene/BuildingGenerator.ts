@@ -10,7 +10,7 @@ import { selectBuildingParts } from "./BuildingParts";
 import { BuildingSurfaceIndex } from "./BuildingSurfaceIndex";
 import * as THREE from "three";
 import type { GeoJSON } from "@/types";
-import type { CollisionWorld, Point } from "./CollisionWorld";
+import { closestPoint, type CollisionWorld, type Point } from "./CollisionWorld";
 import {
     buildingSeed,
     resolveBuildingAppearance,
@@ -121,6 +121,10 @@ export class BuildingGenerator {
         });
         const selection = selectBuildingParts(data.features, local);
         const parentHeights = new Map<GeoJSON['features'][number], { low: number; high: number }>();
+        // Keep outline identity for signs even when parts replace its geometry.
+        const parentSigns = new Map<GeoJSON['features'][number], {
+            ring: Point[]; base: number; top: number; facade: { a: Point; b: Point }; length: number;
+        }>();
         const counts: Record<string, number> = {};
         let count = 0;
         for (const feature of selection.features) {
@@ -298,7 +302,7 @@ export class BuildingGenerator {
                 ? 0
                 : a.roofMaterial === "metal"
                   ? 1
-                  : a.roofMaterial === "glass"
+                  : ["glass", "mirror"].includes(a.roofMaterial)
                     ? 3
                     : a.roofMaterial === "wood"
                       ? 4
@@ -435,8 +439,34 @@ export class BuildingGenerator {
                 }
             } else this.collisions?.addPolygon(rings, base, top);
             this.details.add(this.buildingGroup, outer, p, base, top);
+            if (parent && parent.geometry.type === "Polygon"
+                && ["museum", "hotel", "hostel"].includes(String(parent.properties.tourism))
+                && typeof parent.properties.name === "string" && parent.properties.name.trim()
+                && !(p.tourism === parent.properties.tourism && p.name === parent.properties.name)) {
+                const boundary = parent.geometry.coordinates[0].map(local);
+                for (let index = 0; index < outer.length; index++) {
+                    const a = outer[index], b = outer[(index + 1) % outer.length];
+                    const length = Math.hypot(b.x - a.x, b.z - a.z);
+                    if (length < 0.5) continue;
+                    const midpoint = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+                    const exposed = boundary.some((point, i) => {
+                        const q = closestPoint(midpoint, point, boundary[(i + 1) % boundary.length]);
+                        return Math.hypot(q.x - midpoint.x, q.z - midpoint.z) < 0.1;
+                    });
+                    if (!exposed) continue;
+                    const current = parentSigns.get(parent);
+                    if (!current || base < current.base - 0.1 || Math.abs(base - current.base) < 0.1 && length > current.length)
+                        parentSigns.set(parent, { ring: outer, base, top, facade: { a, b }, length });
+                }
+            }
             counts[a.style] = (counts[a.style] ?? 0) + 1;
             count++;
+        }
+        for (const [parent, sign] of parentSigns) {
+            const alreadyNamed = selection.features.some(feature => selection.parents.get(feature) === parent
+                && feature.properties.tourism === parent.properties.tourism && feature.properties.name === parent.properties.name);
+            if (!alreadyNamed) this.details.add(this.buildingGroup, sign.ring,
+                { tourism: parent.properties.tourism, name: parent.properties.name }, sign.base, sign.top, sign.facade);
         }
         const surfaces = new BuildingSurfaceIndex();
         for (const [key, batch] of batches)

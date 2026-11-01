@@ -1,129 +1,121 @@
-/**
- * TreeGenerator types and implementation for the city driving simulator.
- * @packageDocumentation
- */
-
+/** Height-aware, spatially instanced broadleaf trees. @packageDocumentation */
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { GeoJSON } from "@/types";
+import { osmMetres } from "./OsmValues";
 
-/** Two shared primitives per 200 m cell instead of two meshes per tree. */
+/** Chooses a reproducible height: explicit height, then height:range, then 5?12 m. */
+export function treeHeight(tags: Record<string, unknown>, random: number): number {
+    const height = osmMetres(tags.height);
+    if (height !== undefined) return height;
+    const range = String(tags["height:range"] ?? "").trim().match(/^(\d+(?:\.\d+)?)\s*(?:m)?\s*(?:[-?;]|to)\s*(\d+(?:\.\d+)?)\s*(?:m)?$/i);
+    const open = String(tags["height:range"] ?? "").trim().match(/^([<>])\s*(\d+(?:\.\d+)?)\s*m?$/i);
+    const limit = open ? Number(open[2]) : 0;
+    const min = range ? Number(range[1]) : open && limit > 0 ? (open[1] === "<" ? limit * 0.5 : limit) : 5;
+    const max = range ? Number(range[2]) : open && limit > 0 ? (open[1] === "<" ? limit : limit * 1.25) : 12;
+    if (min > 0 && max >= min) return min + (max - min) * random;
+    return 5 + 7 * random;
+}
+
+/** Loads one model and instances its primitive meshes in 200 metre cells. */
 export class TreeGenerator {
     private treeGroup = new THREE.Group();
-    private trunk = new THREE.CylinderGeometry(1, 1.2, 1, 8);
-    private canopy = new THREE.ConeGeometry(1, 1, 8);
-    private bark = new THREE.MeshStandardMaterial({
-        color: 0x8b4513,
-        roughness: 0.9,
-    });
-    private leaves = new THREE.MeshStandardMaterial({
-        color: 0x228b22,
-        roughness: 0.8,
-    });
-    /**
-     * Initializes instance state and owned resources using the supplied dependencies.
-     *
-     * @param scene - Scene receiving generated objects; ownership remains with the caller.
-     */
+    private model: THREE.Group | null = null;
+    private loading: Promise<THREE.Group> | null = null;
+    private disposed = false;
+    private revision = 0;
+
+    /** Registers the tree root with ordinary scenery culling. */
     constructor(private scene: THREE.Scene) {
         this.treeGroup.userData.isTreeGroup = true;
         this.treeGroup.userData.cullDistance = 650;
         this.treeGroup.name = "Trees";
         scene.add(this.treeGroup);
     }
-    /**
-     * Builds deterministic tree instances from OSM points in spatially partitioned batches.
-     *
-     * @param data - OSM-derived GeoJSON collection.
-     * @param centerLat - City origin latitude in decimal degrees.
-     * @param centerLon - City origin longitude in decimal degrees.
-     * @param heightAt - Base-elevation sampler in local metres.
-     */
-    generateTreesFromGeoJSON(
-        data: GeoJSON,
-        centerLat: number,
-        centerLon: number,
-        heightAt: (x: number, z: number) => number = () => 0,
-    ): void {
+
+    /** Loads the shared source model, preserving all node transforms and materials. */
+    private async loadModel(): Promise<THREE.Group> {
+        if (this.model) return this.model;
+        this.loading ??= new GLTFLoader().loadAsync("/models/trees/broadleaved.gltf").then(gltf => {
+            if (this.disposed) { this.disposeModel(gltf.scene); throw new Error("Tree generator disposed"); }
+            this.model = gltf.scene;
+            return gltf.scene;
+        });
+        return this.loading;
+    }
+
+    /** Builds deterministic tree instances with their base at sampled terrain height. */
+    async generateTreesFromGeoJSON(data: GeoJSON, centerLat: number, centerLon: number,
+        heightAt: (x: number, z: number) => number = () => 0): Promise<void> {
         this.clear();
-        const cells = new Map<string, { trunks: THREE.Matrix4[]; leaves: THREE.Matrix4[] }>();
-        const scale = (Math.PI / 180) * 6371000;
+        const revision = this.revision;
+        const model = await this.loadModel();
+        if (this.disposed || revision !== this.revision) return;
+        model.updateMatrixWorld(true);
+        const bounds = new THREE.Box3().setFromObject(model), size = bounds.getSize(new THREE.Vector3());
+        if (!(size.y > 0)) throw new Error("Broadleaf tree model has no measurable height");
+        const centre = bounds.getCenter(new THREE.Vector3());
+        const normalize = new THREE.Matrix4().makeTranslation(-centre.x, -bounds.min.y, -centre.z);
+        const primitives: THREE.Mesh[] = [];
+        model.traverse(object => { if (object instanceof THREE.Mesh) primitives.push(object); });
+        const cells = new Map<string, THREE.Matrix4[]>();
+        const projection = Math.PI / 180 * 6371000;
         let count = 0;
-        for (const f of data.features) {
-            if (f.properties.natural !== "tree" || f.geometry.type !== "Point") continue;
-            const [lon, lat] = f.geometry.coordinates,
-                x = (lon - centerLon) * scale * Math.cos((centerLat * Math.PI) / 180),
-                z = -(lat - centerLat) * scale;
-            const key = `${Math.floor(x / 200)},${Math.floor(z / 200)}`;
-            let cell = cells.get(key);
-            if (!cell) {
-                cell = { trunks: [], leaves: [] };
-                cells.set(key, cell);
-            }
+        for (const feature of data.features) {
+            if (feature.properties.natural !== "tree" || feature.geometry.type !== "Point") continue;
+            const [lon, lat] = feature.geometry.coordinates;
+            const x = (lon - centerLon) * projection * Math.cos(centerLat * Math.PI / 180);
+            const z = -(lat - centerLat) * projection;
             let seed = 2166136261;
-            for (const c of String(f.id ?? f.properties["@id"] ?? `${lon},${lat}`))
-                seed = Math.imul(seed ^ c.charCodeAt(0), 16777619);
-            /**
-             * Returns deterministic variation for the active tree seed and shift.
-             *
-             * @param shift - Seed offset for a separate variation channel.
-             */
-            const random = (shift: number) => ((seed >>> shift) % 1000) / 1000;
-            const h = (2.5 + random(0) * 1.5) * 0.5,
-                radius = (0.15 + random(4) * 0.1) * 0.5;
-            const crown = h * (0.8 + random(8) * 0.4),
-                y = heightAt(x, z);
-            const q = new THREE.Quaternion().setFromAxisAngle(
-                new THREE.Vector3(0, 1, 0),
-                random(3) * Math.PI * 2,
-            );
-            cell.trunks.push(
-                new THREE.Matrix4().compose(
-                    new THREE.Vector3(x, y + h / 2, z),
-                    q,
-                    new THREE.Vector3(radius, h, radius),
-                ),
-            );
-            cell.leaves.push(
-                new THREE.Matrix4().compose(
-                    new THREE.Vector3(x, y + h + crown / 2, z),
-                    q,
-                    new THREE.Vector3(crown * 0.6, crown, crown * 0.6),
-                ),
-            );
+            for (const char of String(feature.id ?? feature.properties["@id"] ?? lon + "," + lat))
+                seed = Math.imul(seed ^ char.charCodeAt(0), 16777619);
+            const random = (seed >>> 0) / 4294967296;
+            const height = treeHeight(feature.properties, random);
+            const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (seed >>> 8) / 16777216 * Math.PI * 2);
+            const scale = height / size.y;
+            const matrix = new THREE.Matrix4().compose(new THREE.Vector3(x, heightAt(x, z), z), rotation,
+                new THREE.Vector3(scale, scale, scale)).multiply(normalize);
+            const key = Math.floor(x / 200) + "," + Math.floor(z / 200);
+            if (!cells.has(key)) cells.set(key, []);
+            cells.get(key)!.push(matrix);
             count++;
         }
-        for (const cell of cells.values())
-            for (const [matrices, geometry, material] of [
-                [cell.trunks, this.trunk, this.bark],
-                [cell.leaves, this.canopy, this.leaves],
-            ] as const) {
-                const mesh = new THREE.InstancedMesh(geometry, material, matrices.length);
-                matrices.forEach((matrix, i) => mesh.setMatrixAt(i, matrix));
-                mesh.computeBoundingSphere();
-                mesh.castShadow = mesh.receiveShadow = true;
-                this.treeGroup.add(mesh);
-            }
+        for (const matrices of cells.values()) for (const primitive of primitives) {
+            const mesh = new THREE.InstancedMesh(primitive.geometry, primitive.material, matrices.length);
+            matrices.forEach((matrix, index) => mesh.setMatrixAt(index, matrix.clone().multiply(primitive.matrixWorld)));
+            mesh.computeBoundingSphere();
+            mesh.castShadow = mesh.receiveShadow = true;
+            this.treeGroup.add(mesh);
+        }
         this.treeGroup.userData.treeCount = count;
-        console.log(
-            `Generated ${count} trees in ${this.treeGroup.children.length} spatial batches`,
-        );
     }
-    /**
-     * Clears generated content and cached lookup data so the instance can be reused.
-     */
+
+    /** Removes instances while retaining reusable source geometry and materials. */
     clear(): void {
+        this.revision++;
         for (const mesh of this.treeGroup.children) (mesh as THREE.InstancedMesh).dispose();
         this.treeGroup.clear();
     }
-    /**
-     * Releases owned resources and unregisters scene objects, browser listeners or audio nodes as applicable.
-     */
+
+    /** Releases each shared source resource once. */
+    private disposeModel(model: THREE.Group): void {
+        const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
+        model.traverse(object => {
+            if (!(object instanceof THREE.Mesh)) return;
+            geometries.add(object.geometry);
+            for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+                materials.add(material);
+                for (const value of Object.values(material)) if (value instanceof THREE.Texture) textures.add(value);
+            }
+        });
+        geometries.forEach(value => value.dispose()); materials.forEach(value => value.dispose()); textures.forEach(value => value.dispose());
+    }
+
+    /** Releases instances, source assets and scene ownership, including pending loads. */
     dispose(): void {
-        this.clear();
-        this.trunk.dispose();
-        this.canopy.dispose();
-        this.bark.dispose();
-        this.leaves.dispose();
+        this.disposed = true; this.clear();
+        if (this.model) this.disposeModel(this.model);
+        this.model = null;
         this.scene.remove(this.treeGroup);
     }
 }

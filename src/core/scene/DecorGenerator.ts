@@ -1,3 +1,4 @@
+import { osmDirection } from "./OsmValues";
 import { addMoaiParts } from "./Moai";
 /**
  * DecorGenerator types and implementation for the city driving simulator.
@@ -225,8 +226,8 @@ export class DecorGenerator {
                       };
             if (!contains(pt.x, pt.z)) continue;
             const y = height(pt),
-                direction = Number(p.direction),
-                yaw = Number.isFinite(direction) ? (direction * Math.PI) / 180 : 0;
+                direction = osmDirection(p.direction),
+                yaw = direction === undefined ? 0 : Math.PI - (direction * Math.PI) / 180;
             /**
              * Registers an item or generated feature with this instance using the supplied geometry and metadata.
              *
@@ -291,18 +292,23 @@ export class DecorGenerator {
                 );
                 add("cylinder", 0x242b2c, 0, 0.82 * scale, 0, 0.52 * scale, 0.08, 0.52 * scale);
                 radius = 0.3 * scale;
-            } else if (
-                p.highway === "street_lamp" ||
-                man === "utility_pole" ||
-                p.power === "pole" ||
-                man === "surveillance"
-            ) {
+            } else if (man === "surveillance") {
+                const bearing = osmDirection(p["camera:direction"]) ?? osmDirection(p["camera:angle"]);
+                if (bearing === undefined) continue;
+                const cameraYaw = Math.PI - bearing * Math.PI / 180;
+                const cameraHeight = this.dimension(p.height, 3, 1, 12);
+                post(cameraHeight);
+                this.part("box", stone, pt.x, y + cameraHeight, pt.z, 0.22, 0.2, 0.48, cameraYaw);
+                this.part("cylinder", 0x14232c, pt.x + Math.sin(cameraYaw) * 0.25,
+                    y + cameraHeight, pt.z + Math.cos(cameraYaw) * 0.25,
+                    0.12, 0.06, 0.12, cameraYaw, Math.PI / 2);
+            } else if (p.highway === "street_lamp" || man === "utility_pole") {
                 const h = this.dimension(p.height, 6, 2, 18);
                 post(h);
                 add("box", metal, 0, h, 0.5, 0.12, 0.12, 1.1);
                 add(
                     "box",
-                    p.highway === "street_lamp" ? this.lampColor : man === "surveillance" ? stone : 0xf2e2b5,
+                    p.highway === "street_lamp" ? this.lampColor : 0xf2e2b5,
                     0,
                     h - 0.1,
                     1,
@@ -316,9 +322,9 @@ export class DecorGenerator {
                 post(2.7);
                 add("box", metal, 0, 2.35, 0, 1.45, 0.75, 0.12);
                 this.busStops.add(p, pt.x, y, pt.z, yaw);
-            } else if (p.traffic_sign || p.information || p.advertising || amenity === "clock") {
+            } else if (p.traffic_sign || amenity === "clock") {
                 post();
-                const board = p.advertising || p.information === "map" || p.information === "board";
+                const board = false;
                 add("box", stone, 0, 2, 0, board ? 1.3 : 0.48, board ? 1 : 0.6, 0.1);
                 add(
                     "box",
@@ -350,7 +356,6 @@ export class DecorGenerator {
             } else if (
                 ["drinking_water", "post_box", "telephone", "parking_meter"].includes(amenity) ||
                 man === "water_tap" ||
-                man === "street_cabinet" ||
                 p.emergency === "fire_hydrant"
             ) {
                 const hydrant = p.emergency === "fire_hydrant";
@@ -366,18 +371,10 @@ export class DecorGenerator {
                 );
                 if (hydrant || amenity === "drinking_water" || man === "water_tap")
                     add("box", stone, 0, 0.85, -0.2, 0.5, 0.12, 0.3);
-            } else if (
-                man === "flagpole" ||
-                man === "mast" ||
-                man === "tower" ||
-                p.power === "tower"
-            ) {
-                const h = this.dimension(p.height, man === "flagpole" ? 7 : 12, 3, 40);
+            } else if (man === "flagpole") {
+                const h = this.dimension(p.height, 7, 3, 40);
                 post(h);
-                if (man === "flagpole") add("box", 0xbe5650, 0.65, h - 0.6, 0, 1.3, 0.8, 0.025);
-                else
-                    for (const up of [h * 0.65, h * 0.9])
-                        add("box", metal, 0, up, 0, 2.4, 0.13, 0.13);
+                add("box", 0xbe5650, 0.65, h - 0.6, 0, 1.3, 0.8, 0.025);
             } else if (p.artwork_type === "statue" || p.artwork_type === "sculpture"
                 || p.memorial === "statue" || p.historic === "statue") {
                 const scale = this.dimension(p.height, 2.8, 1, 8) / 2.8;
@@ -395,11 +392,11 @@ export class DecorGenerator {
                 };
                 addMoaiParts(stonePart, stone);
                 radius = 0.58 * scale;
-            } else if (p.historic || p.tourism === "artwork") {
+            } else if (p.historic) {
                 add("box", stone, 0, 0.3, 0, 1, 0.6, 1);
                 add(
-                    p.tourism === "artwork" ? "sphere" : "box",
-                    p.tourism === "artwork" ? 0x708b89 : stone,
+                    "box",
+                    stone,
                     0,
                     1.25,
                     0,

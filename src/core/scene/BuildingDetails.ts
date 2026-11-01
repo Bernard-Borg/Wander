@@ -20,6 +20,7 @@ export class BuildingDetails {
         tags: Record<string, unknown>,
         base: number,
         top: number,
+        facade?: { a: Point; b: Point },
     ): void {
         const kind = String(tags.building ?? "");
         const kiosk = kind === "kiosk" || tags.shop === "kiosk";
@@ -27,7 +28,9 @@ export class BuildingDetails {
         const hospital = kind === "hospital" || tags.amenity === "hospital";
         const toilets = kind === "toilets" || tags.amenity === "toilets";
         const windmill = kind === "windmill" || tags.man_made === "windmill";
-        if (!(kiosk || market || hospital || toilets || windmill)) return;
+        const namedTourism = ["museum", "hotel", "hostel"].includes(String(tags.tourism))
+            && typeof tags.name === "string" && tags.name.trim().length > 0;
+        if (!(kiosk || market || hospital || toilets || windmill || namedTourism)) return;
         let area = 0;
         ring.forEach((a, i) => {
             const b = ring[(i + 1) % ring.length]!;
@@ -38,7 +41,7 @@ export class BuildingDetails {
             (a, b) =>
                 Math.hypot(b.b.x - b.a.x, b.b.z - b.a.z) - Math.hypot(a.b.x - a.a.x, a.b.z - a.a.z),
         );
-        const { a, b } = edges[0]!;
+        const { a, b } = facade ?? edges[0]!;
         const length = Math.hypot(b.x - a.x, b.z - a.z);
         const nx = ((area >= 0 ? 1 : -1) * (b.z - a.z)) / length;
         const nz = ((area >= 0 ? -1 : 1) * (b.x - a.x)) / length;
@@ -93,7 +96,7 @@ export class BuildingDetails {
             cross.castShadow = cross.receiveShadow = true;
             group.add(cross);
         }
-        const text = hospital ? "" : toilets ? "WC  ?  ? / ?" : String(tags.name ?? tags.brand ?? "");
+        const text = hospital ? "" : toilets ? "WC  ?  ? / ?" : String(namedTourism ? tags.name : tags.name ?? tags.brand ?? "");
         if (text) {
             const canvas = document.createElement("canvas");
             canvas.width = 1024;
@@ -124,6 +127,7 @@ export class BuildingDetails {
                 new THREE.PlaneGeometry(width, width / 4),
                 signMaterial,
             );
+            sign.name = `Building placard: ${text}`;
             sign.position.set(
                 0,
                 Math.max(0.5, Math.min(height - 0.5, 2.7)),

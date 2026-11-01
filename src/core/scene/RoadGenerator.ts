@@ -1,3 +1,4 @@
+import { osmMetres } from "./OsmValues";
 import { tunnelSection, TUNNEL_THICKNESS } from "./TunnelSection";
 /**
  * RoadGenerator types and implementation for the city driving simulator.
@@ -173,6 +174,7 @@ export class RoadGenerator {
         surface: string;
         profile: RoadProfile;
     }> = [];
+    private surfaceMaterials = new Map<string, THREE.MeshStandardMaterial>();
     private surfaceGrid = new SpatialGrid<RoadSegment>();
     private readonly surfaceSampleSpacing = 2; // meters between surface samples
 
@@ -214,7 +216,11 @@ export class RoadGenerator {
             polygonOffsetUnits: -4,
             side: THREE.DoubleSide,
         }),
-        sidewalkMaterial: new THREE.MeshStandardMaterial({ color: 0x999b9b, roughness: 0.95, side: THREE.DoubleSide }),
+        sidewalkMaterial: new THREE.MeshStandardMaterial({
+            color: 0x999b9b,
+            roughness: 0.95,
+            side: THREE.DoubleSide,
+        }),
         ceilingMaterial: new THREE.MeshStandardMaterial({
             color: 0x4a4a4a,
             roughness: 0.8,
@@ -273,9 +279,10 @@ export class RoadGenerator {
                 } else {
                     // Only dispose if not a shared material
                     const materialId = (object.material as any).uuid;
-                    const isShared = Object.values(this.sharedMaterials).some(
-                        (m) => m.uuid === materialId,
-                    );
+                    const isShared = [
+                        ...Object.values(this.sharedMaterials),
+                        ...this.surfaceMaterials.values(),
+                    ].some((m) => m.uuid === materialId);
                     if (!isShared) {
                         object.material.map?.dispose();
                         object.material.dispose();
@@ -327,7 +334,7 @@ export class RoadGenerator {
 
     /**
      * Parses supported OSM highway ways, solves road profiles, generates geometry and batches compatible meshes.
-     * Skips service roads, footways, paths and steps. Progress callbacks are awaited between generation stages.
+     * Supports service roads, footways, paths and steps. Progress callbacks are awaited between generation stages.
      *
      * @param geoJSON - OSM-derived GeoJSON collection containing highway LineStrings.
      * @param centerLat - City origin latitude in decimal degrees.
@@ -354,7 +361,7 @@ export class RoadGenerator {
             )
                 continue;
             const highway = String(feature.properties.highway);
-            if (["service", "footway", "path", "steps"].includes(highway)) continue;
+
             const p = feature.properties;
             const tunnel = p.tunnel === "yes" || p.tunnel === "building_passage";
             const bridge = p.bridge !== undefined && p.bridge !== "no" && p.bridge !== false;
@@ -371,10 +378,18 @@ export class RoadGenerator {
                 ),
                 kind: tunnel || layer < 0 ? "tunnel" : bridge || layer > 0 ? "bridge" : "ground",
                 layer,
-                halfWidth: this.getRoadWidth(highway, lanes) / 2,
+                halfWidth: (osmMetres(p.width) ?? this.getRoadWidth(highway, lanes)) / 2,
+                highway,
                 sidewalks: sidewalkWidths(p, bridge || layer > 0),
                 lanes,
-                surface: String(p.surface ?? "asphalt").toLowerCase(),
+                surface: String(
+                    p.surface ??
+                        (["footway", "path"].includes(highway)
+                            ? "dirt"
+                            : highway === "steps"
+                              ? "concrete"
+                              : "asphalt"),
+                ).toLowerCase(),
                 headroom:
                     Number.isFinite(parsedHeadroom) && parsedHeadroom >= 2
                         ? parsedHeadroom
@@ -454,11 +469,16 @@ export class RoadGenerator {
                 group.add(mesh);
             }
         }
+        const surfaceMaterials = new Set<THREE.Material>([
+            this.sharedMaterials.roadMaterial,
+            this.sharedMaterials.tunnelMaterial,
+            ...this.surfaceMaterials.values(),
+        ]);
         this.roads = [...this.roadGroup.children, ...this.tunnelGroup.children].filter(
             (o): o is THREE.Mesh =>
                 o instanceof THREE.Mesh &&
-                (o.material === this.sharedMaterials.roadMaterial ||
-                    o.material === this.sharedMaterials.tunnelMaterial),
+                !Array.isArray(o.material) &&
+                surfaceMaterials.has(o.material),
         );
     }
 
@@ -511,7 +531,11 @@ export class RoadGenerator {
 
         // Create the main road mesh along the curve
         // Tunnels use the same rendering as regular roads, just with darker color
-        this.createRoadMeshAlongCurve(curve, roadWidth, numSegments, isTunnel);
+        const unmarked = ["service", "footway", "path", "steps"].includes(
+            profile.input.highway ?? "",
+        );
+        if (profile.input.highway === "steps") this.createSteps(profile);
+        else this.createRoadMeshAlongCurve(curve, roadWidth, numSegments, isTunnel);
 
         // Store surface samples for road audio
         this.storeSurfaceSamples(curve, roadWidth, curveLength, surface);
@@ -522,10 +546,10 @@ export class RoadGenerator {
         }
 
         // Create yellow edge lines along the curve
-        this.createEdgeLinesAlongCurve(curve, roadWidth, numSegments, curveLength);
+        if (!unmarked) this.createEdgeLinesAlongCurve(curve, roadWidth, numSegments, curveLength);
 
         // Create lane dividers along the curve if multiple lanes
-        if (lanesCount > 1) {
+        if (!unmarked && lanesCount > 1) {
             this.createLaneDividersAlongCurve(
                 curve,
                 roadWidth,
@@ -535,7 +559,8 @@ export class RoadGenerator {
             );
         }
 
-        this.createProfileSides(profile, curve, roadWidth, numSegments);
+        if (profile.input.highway !== "steps" || profile.input.kind !== "ground")
+            this.createProfileSides(profile, curve, roadWidth, numSegments);
         this.createSidewalks(profile, numSegments);
         if (roadName) {
             const point = curve.getPoint(0.5);
@@ -556,35 +581,68 @@ export class RoadGenerator {
      * @param segments - Longitudinal subdivisions shared with the road mesh.
      */
     private createSidewalks(profile: RoadProfile, segments: number): void {
-        const tops: number[] = [], sides: number[] = [];
+        const tops: number[] = [],
+            sides: number[] = [];
         for (const side of [-1, 1]) {
-            const width = profile.input.sidewalks?.[side === 1 ? 'right' : 'left'] ?? 0;
+            const width = profile.input.sidewalks?.[side === 1 ? "right" : "left"] ?? 0;
             if (!width) continue;
             for (let i = 0; i < segments; i++) {
-                const t = i / segments, u = (i + 1) / segments;
-                const a = profile.curve.getPoint(t), b = profile.curve.getPoint(u);
-                const na = profile.perpendicularAt(t), nb = profile.perpendicularAt(u);
+                const t = i / segments,
+                    u = (i + 1) / segments;
+                const a = profile.curve.getPoint(t),
+                    b = profile.curve.getPoint(u);
+                const na = profile.perpendicularAt(t),
+                    nb = profile.perpendicularAt(u);
                 const innerA = a.clone().addScaledVector(na, profile.halfWidthAt(t) * side);
                 const innerB = b.clone().addScaledVector(nb, profile.halfWidthAt(u) * side);
                 const outerA = innerA.clone().addScaledVector(na, width * side);
                 const outerB = innerB.clone().addScaledVector(nb, width * side);
-                for (const p of [innerA, innerB, outerA, outerA, innerB, outerB]) tops.push(p.x, 0, p.z);
-                for (const [p, q] of [[innerA, innerB], [outerB, outerA]]) {
-                    const lowP = profile.sample(p.x, p.z).height, lowQ = profile.sample(q.x, q.z).height;
-                    sides.push(p.x, lowP, p.z, q.x, lowQ, q.z, p.x, lowP + 0.15, p.z,
-                        p.x, lowP + 0.15, p.z, q.x, lowQ, q.z, q.x, lowQ + 0.15, q.z);
+                for (const p of [innerA, innerB, outerA, outerA, innerB, outerB])
+                    tops.push(p.x, 0, p.z);
+                for (const [p, q] of [
+                    [innerA, innerB],
+                    [outerB, outerA],
+                ]) {
+                    const lowP = profile.sample(p.x, p.z).height,
+                        lowQ = profile.sample(q.x, q.z).height;
+                    sides.push(
+                        p.x,
+                        lowP,
+                        p.z,
+                        q.x,
+                        lowQ,
+                        q.z,
+                        p.x,
+                        lowP + 0.15,
+                        p.z,
+                        p.x,
+                        lowP + 0.15,
+                        p.z,
+                        q.x,
+                        lowQ,
+                        q.z,
+                        q.x,
+                        lowQ + 0.15,
+                        q.z,
+                    );
                 }
             }
         }
-        for (const [positions, top] of [[tops, true], [sides, false]] as const) {
+        for (const [positions, top] of [
+            [tops, true],
+            [sides, false],
+        ] as const) {
             if (!positions.length) continue;
             const geometry = new THREE.BufferGeometry();
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
             if (top) this.drapeSurface(geometry, ROAD_HEIGHT + 0.15);
             this.corridors.cut(geometry, profile.input.id, false, false);
-            geometry.computeVertexNormals(); geometry.computeBoundingSphere();
+            geometry.computeVertexNormals();
+            geometry.computeBoundingSphere();
             const mesh = new THREE.Mesh(geometry, this.sharedMaterials.sidewalkMaterial);
-            mesh.name = 'Sidewalk'; mesh.castShadow = mesh.receiveShadow = true; this.roadGroup.add(mesh);
+            mesh.name = "Sidewalk";
+            mesh.castShadow = mesh.receiveShadow = true;
+            this.roadGroup.add(mesh);
         }
     }
 
@@ -655,10 +713,22 @@ export class RoadGenerator {
             const raised = Math.max(a.y - ga, b.y - gb) > 0.2;
             if (profile.input.kind === "ground" && !lowered && !raised) continue;
             for (const side of [-1, 1]) {
-                const ea = a.clone().addScaledVector(pa, side * (profile.halfWidthAt(i / segments) + (profile.input.sidewalks?.[side === 1 ? "right" : "left"] ?? 0)));
+                const ea = a
+                    .clone()
+                    .addScaledVector(
+                        pa,
+                        side *
+                            (profile.halfWidthAt(i / segments) +
+                                (profile.input.sidewalks?.[side === 1 ? "right" : "left"] ?? 0)),
+                    );
                 const eb = b
                     .clone()
-                    .addScaledVector(pb, side * (profile.halfWidthAt((i + 1) / segments) + (profile.input.sidewalks?.[side === 1 ? "right" : "left"] ?? 0)));
+                    .addScaledVector(
+                        pb,
+                        side *
+                            (profile.halfWidthAt((i + 1) / segments) +
+                                (profile.input.sidewalks?.[side === 1 ? "right" : "left"] ?? 0)),
+                    );
                 ea.y = profile.sample(ea.x, ea.z).height;
                 eb.y = profile.sample(eb.x, eb.z).height;
                 if (
@@ -705,10 +775,38 @@ export class RoadGenerator {
                 }
             }
             if (profile.input.kind === "bridge" || (profile.input.kind === "ground" && raised)) {
-                const la = a.clone().addScaledVector(pa, (profile.halfWidthAt(i / segments) + (profile.input.sidewalks?.right ?? 0))),
-                    ra = a.clone().addScaledVector(pa, -(profile.halfWidthAt(i / segments) + (profile.input.sidewalks?.left ?? 0)));
-                const lb = b.clone().addScaledVector(pb, (profile.halfWidthAt((i + 1) / segments) + (profile.input.sidewalks?.right ?? 0))),
-                    rb = b.clone().addScaledVector(pb, -(profile.halfWidthAt((i + 1) / segments) + (profile.input.sidewalks?.left ?? 0)));
+                const la = a
+                        .clone()
+                        .addScaledVector(
+                            pa,
+                            profile.halfWidthAt(i / segments) +
+                                (profile.input.sidewalks?.right ?? 0),
+                        ),
+                    ra = a
+                        .clone()
+                        .addScaledVector(
+                            pa,
+                            -(
+                                profile.halfWidthAt(i / segments) +
+                                (profile.input.sidewalks?.left ?? 0)
+                            ),
+                        );
+                const lb = b
+                        .clone()
+                        .addScaledVector(
+                            pb,
+                            profile.halfWidthAt((i + 1) / segments) +
+                                (profile.input.sidewalks?.right ?? 0),
+                        ),
+                    rb = b
+                        .clone()
+                        .addScaledVector(
+                            pb,
+                            -(
+                                profile.halfWidthAt((i + 1) / segments) +
+                                (profile.input.sidewalks?.left ?? 0)
+                            ),
+                        );
                 for (const p of [la, ra, lb, ra, rb, lb])
                     vertices.push(
                         p.x,
@@ -741,7 +839,9 @@ export class RoadGenerator {
             const perpendicular = profile.perpendicularAt(t);
             const halfWidth = profile.halfWidthAt(t);
             for (const side of [-1, 1]) {
-                const point = centre.clone().addScaledVector(perpendicular, side * Math.max(0.5, halfWidth - 0.8));
+                const point = centre
+                    .clone()
+                    .addScaledVector(perpendicular, side * Math.max(0.5, halfWidth - 0.8));
                 const base = this.groundSample(point.x, point.z).height;
                 const top = profile.sample(point.x, point.z).height - this.settings.deckThickness;
                 const height = top - base;
@@ -753,12 +853,20 @@ export class RoadGenerator {
                 mesh.position.set(point.x, base + height / 2, point.z);
                 mesh.castShadow = mesh.receiveShadow = true;
                 this.roadGroup.add(mesh);
-                this.collisions?.addPolygon([[
-                    { x: point.x - radius, z: point.z - radius },
-                    { x: point.x + radius, z: point.z - radius },
-                    { x: point.x + radius, z: point.z + radius },
-                    { x: point.x - radius, z: point.z + radius },
-                ]], base, top, "road", profile.input.id);
+                this.collisions?.addPolygon(
+                    [
+                        [
+                            { x: point.x - radius, z: point.z - radius },
+                            { x: point.x + radius, z: point.z - radius },
+                            { x: point.x + radius, z: point.z + radius },
+                            { x: point.x - radius, z: point.z + radius },
+                        ],
+                    ],
+                    base,
+                    top,
+                    "road",
+                    profile.input.id,
+                );
             }
         }
     }
@@ -789,10 +897,15 @@ export class RoadGenerator {
             const segment = {
                 a: points[i - 1],
                 b: points[i],
-                halfWidth: Math.max(
-                    this.activeProfile!.halfWidthAt((i - 1) / sampleCount),
-                    this.activeProfile!.halfWidthAt(i / sampleCount),
-                ) + Math.max(this.activeProfile!.input.sidewalks?.left ?? 0, this.activeProfile!.input.sidewalks?.right ?? 0),
+                halfWidth:
+                    Math.max(
+                        this.activeProfile!.halfWidthAt((i - 1) / sampleCount),
+                        this.activeProfile!.halfWidthAt(i / sampleCount),
+                    ) +
+                    Math.max(
+                        this.activeProfile!.input.sidewalks?.left ?? 0,
+                        this.activeProfile!.input.sidewalks?.right ?? 0,
+                    ),
                 surface,
                 profile: this.activeProfile!,
                 startT: (i - 1) / sampleCount,
@@ -842,7 +955,8 @@ export class RoadGenerator {
         for (const road of this.surfaceGrid.at(x, z)) {
             const q = closestPoint({ x, z }, road.a, road.b);
             const distance = Math.hypot(x - q.x, z - q.z);
-            if (distance < (nearest.get(road.profile)?.distance ?? Infinity)) nearest.set(road.profile, { road, distance });
+            if (distance < (nearest.get(road.profile)?.distance ?? Infinity))
+                nearest.set(road.profile, { road, distance });
         }
         for (const { road } of nearest.values()) {
             const q = closestPoint({ x, z }, road.a, road.b);
@@ -854,12 +968,17 @@ export class RoadGenerator {
             const width = road.profile.halfWidthAt(
                 THREE.MathUtils.lerp(road.startT ?? 0, road.endT ?? 1, fraction),
             );
-            const rightSide = (x - q.x) * -(road.b.z - road.a.z) + (z - q.z) * (road.b.x - road.a.x) >= 0;
-            const sidewalk = road.profile.input.sidewalks?.[rightSide ? 'right' : 'left'] ?? 0;
+            const rightSide =
+                (x - q.x) * -(road.b.z - road.a.z) + (z - q.z) * (road.b.x - road.a.x) >= 0;
+            const sidewalk = road.profile.input.sidewalks?.[rightSide ? "right" : "left"] ?? 0;
             if (distance > width + sidewalk || checked.has(road.profile)) continue;
             checked.add(road.profile);
             const contact = road.profile.sample(x, z);
-            if (distance > width && sidewalk > 0) { contact.height += 0.15; contact.surface = "concrete"; contact.grip = 1; }
+            if (distance > width && sidewalk > 0) {
+                contact.height += 0.15;
+                contact.surface = "concrete";
+                contact.grip = 1;
+            }
             const verticalDistance = Math.abs(y - 0.4 - contact.height);
             // Reachable contact only: an overhead bridge or buried road cannot attract a car on another level.
             if (!snap && verticalDistance > 1.5) continue;
@@ -886,16 +1005,29 @@ export class RoadGenerator {
      * @returns Unique street names and positions on their solved road decks.
      */
     findStreets(query: string): Array<{ name: string; position: THREE.Vector3 }> {
-        const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const normalize = (text: string) =>
+            text
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .toLowerCase();
         const needle = normalize(query.trim());
         if (!needle) return [];
         const found = new Map<string, { name: string; position: THREE.Vector3 }>();
         for (const profile of this.profiles) {
             const name = profile.input.name;
             if (!name || !normalize(name).includes(needle) || found.has(name)) continue;
-            found.set(name, { name, position: profile.curve.getPoint(0.5).add(new THREE.Vector3(0, 0.4, 0)) });
+            found.set(name, {
+                name,
+                position: profile.curve.getPoint(0.5).add(new THREE.Vector3(0, 0.4, 0)),
+            });
         }
-        return [...found.values()].sort((a, b) => Number(normalize(b.name) === needle) - Number(normalize(a.name) === needle) || a.name.localeCompare(b.name)).slice(0, 8);
+        return [...found.values()]
+            .sort(
+                (a, b) =>
+                    Number(normalize(b.name) === needle) - Number(normalize(a.name) === needle) ||
+                    a.name.localeCompare(b.name),
+            )
+            .slice(0, 8);
     }
 
     getWallHeight(x: number, z: number, layer: number): number {
@@ -963,6 +1095,8 @@ export class RoadGenerator {
      */
     dispose(): void {
         this.clear();
+        this.surfaceMaterials.forEach((material) => material.dispose());
+        this.surfaceMaterials.clear();
         Object.values(this.sharedMaterials).forEach((material) => {
             material.map?.dispose();
             material.dispose();
@@ -979,6 +1113,122 @@ export class RoadGenerator {
      * @param numSegments - Number of longitudinal mesh subdivisions.
      * @param isTunnel - Whether to use the darker tunnel road material.
      */
+    /** Caches metre-scaled procedural paving, with feathered edges for walking paths. */
+    private roadSurfaceMaterial(surface: string, feathered = false): THREE.MeshStandardMaterial {
+        const kind = ["dirt", "ground", "earth", "mud", "sand", "grass", "unpaved"].includes(
+            surface,
+        )
+            ? "dirt"
+            : ["gravel", "fine_gravel", "pebblestone", "compacted"].includes(surface)
+              ? "gravel"
+              : ["paving_stones", "cobblestone", "sett", "unhewn_cobblestone", "brick"].includes(
+                      surface,
+                  )
+                ? "paving"
+                : ["concrete", "concrete:plates", "concrete:lanes", "cement"].includes(surface)
+                  ? "concrete"
+                  : "asphalt";
+        const key = kind + ":" + surface + ":" + feathered;
+        const cached = this.surfaceMaterials.get(key);
+        if (cached) return cached;
+        const material = new THREE.MeshStandardMaterial({
+            color:
+                kind === "dirt"
+                    ? surface === "sand"
+                        ? 0xc6b68a
+                        : surface === "grass"
+                          ? 0x68744a
+                          : 0x9b855e
+                    : kind === "gravel"
+                      ? 0x999184
+                      : kind === "paving"
+                        ? 0x9b968b
+                        : kind === "concrete"
+                          ? 0xaaa79d
+                          : 0x55585a,
+            roughness: 0.95,
+            side: THREE.DoubleSide,
+            transparent: feathered,
+            depthWrite: !feathered,
+            polygonOffset: true,
+            polygonOffsetFactor: -2,
+            polygonOffsetUnits: -2,
+        });
+        material.onBeforeCompile = (shader) => {
+            shader.vertexShader =
+                "varying vec3 roadPosition; varying vec2 roadUV;\n" + shader.vertexShader;
+            shader.vertexShader = shader.vertexShader.replace(
+                "#include <begin_vertex>",
+                "#include <begin_vertex>\nroadPosition = position; roadUV = uv;",
+            );
+            shader.fragmentShader =
+                "varying vec3 roadPosition; varying vec2 roadUV;\n" + shader.fragmentShader;
+            shader.fragmentShader = shader.fragmentShader.replace(
+                "#include <color_fragment>",
+                `#include <color_fragment>
+                vec2 roadP = roadPosition.xz;
+                float grain = fract(sin(dot(floor(roadP * ${kind === "gravel" ? "14.0" : "45.0"}), vec2(12.9898, 78.233))) * 43758.5453);
+                float grainFade = 1.0 - smoothstep(0.03, 0.25, max(fwidth(roadP.x), fwidth(roadP.y)));
+                diffuseColor.rgb *= 1.0 + (grain - 0.5) * ${kind === "gravel" ? "0.4" : "0.16"} * grainFade;
+                ${kind === "paving" ? "float mortar = max(step(0.91, fract(roadP.x / 0.35 + floor(roadP.y / 0.23) * 0.5)), step(0.9, fract(roadP.y / 0.23))); diffuseColor.rgb *= 1.0 - mortar * 0.3 * grainFade;" : ""}
+                ${kind === "concrete" ? "float joint = max(step(0.992, fract(roadP.x / 3.0)), step(0.992, fract(roadP.y / 3.0))); diffuseColor.rgb *= 1.0 - joint * 0.2 * grainFade;" : ""}
+                ${feathered ? "float edgeNoise = sin(roadUV.y * 3.1) * 0.025 + sin(roadUV.y * 9.7) * 0.012; float edge = min(roadUV.x, 1.0 - roadUV.x); diffuseColor.a *= smoothstep(0.0, 0.18, edge + edgeNoise);" : ""}`,
+            );
+        };
+        material.customProgramCacheKey = () => key;
+        this.surfaceMaterials.set(key, material);
+        return material;
+    }
+
+    /** Builds horizontal treads and vertical risers, matching the contact sampler's 17 cm maximum rise. */
+    private createSteps(profile: RoadProfile): void {
+        const vertices: number[] = [],
+            uvs: number[] = [];
+        /** Appends a quad with local horizontal coordinates and explicit elevations. */
+        const quad = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3) => {
+            for (const point of [a, b, c, b, d, c]) {
+                vertices.push(point.x, point.y, point.z);
+                uvs.push(point.x, point.z);
+            }
+        };
+        for (let index = 1; index < profile.nodes.length; index++) {
+            const a = profile.nodes[index - 1],
+                b = profile.nodes[index];
+            const length = Math.hypot(b.x - a.x, b.z - a.z);
+            if (length < 0.001) continue;
+            const rise = b.height - a.height,
+                count = Math.max(1, Math.ceil(Math.abs(rise) / 0.17), Math.round(length / 0.32));
+            const nx = (-(b.z - a.z) / length) * profile.input.halfWidth;
+            const nz = ((b.x - a.x) / length) * profile.input.halfWidth;
+            for (let step = 0; step < count; step++) {
+                const t = step / count,
+                    u = (step + 1) / count;
+                const x = a.x + (b.x - a.x) * t,
+                    z = a.z + (b.z - a.z) * t;
+                const endX = a.x + (b.x - a.x) * u,
+                    endZ = a.z + (b.z - a.z) * u;
+                const y = a.height + rise * t,
+                    endY = a.height + rise * u;
+                const left = new THREE.Vector3(x + nx, y, z + nz),
+                    right = new THREE.Vector3(x - nx, y, z - nz);
+                const endLeft = new THREE.Vector3(endX + nx, y, endZ + nz),
+                    endRight = new THREE.Vector3(endX - nx, y, endZ - nz);
+                quad(left, endLeft, right, endRight);
+                quad(endLeft, endLeft.clone().setY(endY), endRight, endRight.clone().setY(endY));
+            }
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+        geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.computeVertexNormals();
+        geometry.computeBoundingSphere();
+        const mesh = new THREE.Mesh(geometry, this.roadSurfaceMaterial(profile.input.surface));
+        mesh.receiveShadow = mesh.castShadow = true;
+        (profile.input.kind === "tunnel" ? this.tunnelGroup : this.roadGroup).add(mesh);
+        this.roads.push(mesh);
+    }
+
+    /** Generates the draped road ribbon with surface-specific paving. */
     private createRoadMeshAlongCurve(
         curve: THREE.Curve<THREE.Vector3>,
         roadWidth: number,
@@ -988,6 +1238,7 @@ export class RoadGenerator {
         const halfWidth = roadWidth / 2;
         const vertices: number[] = [];
         const indices: number[] = [];
+        const uvs: number[] = [];
 
         // Generate vertices along the curve
         for (let i = 0; i <= numSegments; i++) {
@@ -1008,6 +1259,7 @@ export class RoadGenerator {
                     perp.clone().multiplyScalar(-(this.activeProfile?.halfWidthAt(t) ?? halfWidth)),
                 );
 
+            uvs.push(0, t * numSegments * 2, 1, t * numSegments * 2);
             // Add vertices (left edge)
             vertices.push(leftPoint.x, leftPoint.y, leftPoint.z);
 
@@ -1047,14 +1299,16 @@ export class RoadGenerator {
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(vertices), 3));
 
+        geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
         // Compute normals from geometry (don't set manually, let Three.js calculate them)
         geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
         geometry.computeVertexNormals();
 
         // Use shared material to avoid memory leaks
-        const roadMaterial = isTunnel
-            ? this.sharedMaterials.tunnelMaterial
-            : this.sharedMaterials.roadMaterial;
+        const roadMaterial = this.roadSurfaceMaterial(
+            this.activeProfile?.input.surface ?? "asphalt",
+            ["footway", "path"].includes(this.activeProfile?.input.highway ?? ""),
+        );
 
         this.drapeSurface(geometry, ROAD_HEIGHT);
         const roadMesh = new THREE.Mesh(geometry, roadMaterial);
@@ -1091,48 +1345,70 @@ export class RoadGenerator {
         };
         /** Samples a complete inner or outer section in world coordinates. */
         const section = (t: number, thickness: number) => {
-            const centre = curve.getPoint(t), normal = profile.perpendicularAt(t);
-            return tunnelSection(profile.halfWidthAt(t) + (profile.input.sidewalks?.left ?? 0),
-                profile.halfWidthAt(t) + (profile.input.sidewalks?.right ?? 0), profile.headroom, thickness)
-                .map(p => {
-                    const point = centre.clone().addScaledVector(normal, p.u);
-                    point.y = profile.sample(point.x, point.z).height + p.h;
-                    return point;
-                });
+            const centre = curve.getPoint(t),
+                normal = profile.perpendicularAt(t);
+            return tunnelSection(
+                profile.halfWidthAt(t) + (profile.input.sidewalks?.left ?? 0),
+                profile.halfWidthAt(t) + (profile.input.sidewalks?.right ?? 0),
+                profile.headroom,
+                thickness,
+            ).map((p) => {
+                const point = centre.clone().addScaledVector(normal, p.u);
+                point.y = profile.sample(point.x, point.z).height + p.h;
+                return point;
+            });
         };
         for (let i = 0; i < numSegments; i++) {
-            const innerA = section(i / numSegments, 0), innerB = section((i + 1) / numSegments, 0);
-            const outerA = section(i / numSegments, TUNNEL_THICKNESS), outerB = section((i + 1) / numSegments, TUNNEL_THICKNESS);
+            const innerA = section(i / numSegments, 0),
+                innerB = section((i + 1) / numSegments, 0);
+            const outerA = section(i / numSegments, TUNNEL_THICKNESS),
+                outerB = section((i + 1) / numSegments, TUNNEL_THICKNESS);
             for (let j = 0; j < innerA.length - 1; j++) {
                 face(innerA[j]!, innerB[j]!, innerA[j + 1]!, innerB[j + 1]!);
                 face(outerA[j + 1]!, outerB[j + 1]!, outerA[j]!, outerB[j]!);
                 // Register each facet's shell footprint at its own elevation, including
                 // curved shoulders. The central roadway remains open at driving height.
-                const normalA = profile.perpendicularAt(i / numSegments), normalB = profile.perpendicularAt((i + 1) / numSegments);
-                const centreA = curve.getPoint(i / numSegments), centreB = curve.getPoint((i + 1) / numSegments);
-                const offsetsA = [innerA[j]!, innerA[j + 1]!, outerA[j]!, outerA[j + 1]!].map(p => p.clone().sub(centreA).dot(normalA));
-                const offsetsB = [innerB[j]!, innerB[j + 1]!, outerB[j]!, outerB[j + 1]!].map(p => p.clone().sub(centreB).dot(normalB));
-                const footprint = [centreA.clone().addScaledVector(normalA, Math.min(...offsetsA)),
+                const normalA = profile.perpendicularAt(i / numSegments),
+                    normalB = profile.perpendicularAt((i + 1) / numSegments);
+                const centreA = curve.getPoint(i / numSegments),
+                    centreB = curve.getPoint((i + 1) / numSegments);
+                const offsetsA = [innerA[j]!, innerA[j + 1]!, outerA[j]!, outerA[j + 1]!].map((p) =>
+                    p.clone().sub(centreA).dot(normalA),
+                );
+                const offsetsB = [innerB[j]!, innerB[j + 1]!, outerB[j]!, outerB[j + 1]!].map((p) =>
+                    p.clone().sub(centreB).dot(normalB),
+                );
+                const footprint = [
+                    centreA.clone().addScaledVector(normalA, Math.min(...offsetsA)),
                     centreB.clone().addScaledVector(normalB, Math.min(...offsetsB)),
                     centreB.clone().addScaledVector(normalB, Math.max(...offsetsB)),
-                    centreA.clone().addScaledVector(normalA, Math.max(...offsetsA))];
-                this.collisions?.addPolygon([footprint],
+                    centreA.clone().addScaledVector(normalA, Math.max(...offsetsA)),
+                ];
+                this.collisions?.addPolygon(
+                    [footprint],
                     Math.min(innerA[j]!.y, innerB[j]!.y, innerA[j + 1]!.y, innerB[j + 1]!.y) - 0.05,
                     Math.max(outerA[j]!.y, outerB[j]!.y, outerA[j + 1]!.y, outerB[j + 1]!.y),
-                    "road", profile.input.id, true);
+                    "road",
+                    profile.input.id,
+                    true,
+                );
             }
         }
         // End faces close only the lining thickness, never the drive-through opening.
         for (const t of [0, 1]) {
             const node = profile.nodes[t === 0 ? 0 : profile.nodes.length - 1]!;
-            if (node.links.filter(link => link.kind === "tunnel").length > 1) continue;
-            const inner = section(t, 0), outer = section(t, TUNNEL_THICKNESS);
-            for (let j = 0; j < inner.length - 1; j++) face(inner[j]!, inner[j + 1]!, outer[j]!, outer[j + 1]!);
+            if (node.links.filter((link) => link.kind === "tunnel").length > 1) continue;
+            const inner = section(t, 0),
+                outer = section(t, TUNNEL_THICKNESS);
+            for (let j = 0; j < inner.length - 1; j++)
+                face(inner[j]!, inner[j + 1]!, outer[j]!, outer[j + 1]!);
             // The open approach removes terrain all the way to this section. Close
             // the exposed soil above the arch without covering the tunnel opening.
             for (let j = 1; j < outer.length - 2; j++) {
-                const a = outer[j]!, b = outer[j + 1]!;
-                const topA = a.clone(), topB = b.clone();
+                const a = outer[j]!,
+                    b = outer[j + 1]!;
+                const topA = a.clone(),
+                    topB = b.clone();
                 topA.y = Math.max(a.y, this.groundSample(a.x, a.z).height);
                 topB.y = Math.max(b.y, this.groundSample(b.x, b.z).height);
                 if (topA.y > a.y || topB.y > b.y) face(a, b, topA, topB);
@@ -1142,7 +1418,8 @@ export class RoadGenerator {
         geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
         // Only other tunnel bores open this lining. Surface roads must not slice its roof.
         this.corridors.cut(geometry, profile.input.id);
-        geometry.computeVertexNormals(); geometry.computeBoundingSphere();
+        geometry.computeVertexNormals();
+        geometry.computeBoundingSphere();
         const mesh = new THREE.Mesh(geometry, this.sharedMaterials.ceilingMaterial);
         mesh.name = `Tunnel arch ${profile.input.id}`;
         mesh.castShadow = mesh.receiveShadow = true;
@@ -1514,6 +1791,9 @@ export class RoadGenerator {
      * @returns Full road width in metres.
      */
     private getRoadWidth(highwayType: string, lanesCount: number = 1): number {
+        if (highwayType === "service") return 2.8;
+        if (highwayType === "footway" || highwayType === "steps") return 1.8;
+        if (highwayType === "path") return 1.4;
         // Car width is 1.9 units, so minimum lane width is 1.9 * 1.2 = 2.28
         // We'll use 2.5 as a comfortable minimum lane width
         const carWidth = 1.9;

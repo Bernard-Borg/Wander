@@ -116,3 +116,23 @@ Monaco and 2,134 in Rabat, with finite geometry attributes and clean disposal.
 These counts use all exported polygons on flat ground for comparison, so actual
 terrain coverage/tunnel clipping can produce different figures. Visual review is
 still needed for any remaining near-coincident geometry in individual locations.
+
+## Timber, glazing and tourism placards
+
+Both `building:material=timber` and `roof:material=timber` normalize to
+`wood`, with the same brown fallback colour and procedural grain finish.
+`glass` and `mirror` now select glazing on both walls and roofs: low roughness
+(0.12), panel seams and a view-dependent Fresnel sky/ground reflection. Reflection
+sky tint follows scene fog/time of day. This is a cheap analytic reflection,
+not a live scene capture: nearby buildings/cars are not reflected and glazing
+remains opaque. Other finishes retain their shared batched materials.
+
+Buildings with `tourism=museum`, `tourism=hotel` or `tourism=hostel` receive
+a name placard when a non-empty `name` is present. The sign uses the longest
+footprint wall as the facade, as existing storefront signs do. No name means no
+placard; tourism alone no longer generates standalone decor.
+
+When building parts replace a named museum/hotel/hostel outline, its name and
+tourism identity are retained for one placard on an exposed part wall. The lowest
+available wall is preferred, then the longest wall at that level. The outer
+building is still not extruded again, and signs are not repeated on every part.

@@ -375,12 +375,13 @@ export class SceneManager {
                     }
                 }
             const coveredTrees = this.coveredData(trees, "tree");
-            this.treeGenerator.generateTreesFromGeoJSON(
+            await this.treeGenerator.generateTreesFromGeoJSON(
                 coveredTrees,
                 this.centerLat,
                 this.centerLon,
                 heightAt,
             );
+            if (this.disposed) return;
             for (const feature of coveredTrees.features)
                 if (feature.geometry.type === "Point") {
                     const [lon, lat] = feature.geometry.coordinates,

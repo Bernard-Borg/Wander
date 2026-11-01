@@ -333,3 +333,28 @@ other lane-count changes do not create an abrupt width step. Existing divider
 markings fade at changes rather than inventing turn-lane or traffic-direction rules.
 The smoothed profile is shared by road mesh, paint, sidewalks, structural sides
 and road contact sampling; this does not change the bridge height solver.
+
+## Road classes, widths and surfaces
+
+`highway=service` now renders as a narrow 2.8 m road. `footway` defaults to
+1.8 m and `path` to 1.4 m, with dirt paving and noisy, feathered transparent
+edges. `steps` defaults to 1.8 m. None of these four classes gets lane dividers
+or yellow edge paint, regardless of the lanes tag. Bridge/tunnel classification
+and ordinary contact sampling still apply. A valid positive metric `width`
+overrides the nominal full width derived from highway class and lane count;
+existing endpoint join tapers may still blend that width locally.
+
+Steps interpolate elevations between solved profile nodes, with horizontal treads
+and vertical risers: target tread depth is about 32 cm, and rise is at most 17 cm.
+The count increases on steep segments to preserve the rise limit; a very steep
+input can therefore have shorter treads. Flat portions form level paving. The
+vehicle contact sampler uses the same tread quantization and zero slope on each
+tread. This remains a height-field car simulation, not pedestrian stair physics.
+
+`surface` selects shared procedural paving: asphalt/default, concrete slabs,
+cobblestone/sett/paving stones/brick, gravel/compacted, or earth/dirt/sand/grass.
+These use metre-scaled grain/joints, with distance filtering for fine grain.
+Explicit surfaces also apply to walking paths (which keep feathered edges),
+service roads and steps; missing walking-route surfaces default to dirt and steps
+to concrete. Unsupported surface values use asphalt appearance. Existing surface
+names are retained for contact/audio; not every visual alias has unique physics.

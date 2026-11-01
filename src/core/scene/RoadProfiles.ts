@@ -47,6 +47,8 @@ export interface RoadInput {
     sidewalks?: { left: number; right: number };
     name?: string;
     surface: string;
+    /** Original OSM road class controls paving and markings. */
+    highway?: string;
     lanes?: number;
     headroom?: number;
 }
@@ -153,6 +155,18 @@ export class RoadProfile {
      * @param target - Destination for the horizontal centreline point.
      */
     private horizontalPoint(t: number, target = new THREE.Vector3()): THREE.Vector3 {
+        if (this.input.highway === "steps") {
+            let distance = Math.max(0, Math.min(1, t)) * this.horizontalLength;
+            for (let index = 1; index < this.nodes.length; index++) {
+                const a = this.nodes[index - 1], b = this.nodes[index];
+                const length = Math.hypot(b.x - a.x, b.z - a.z);
+                if (distance <= length || index === this.nodes.length - 1) {
+                    const fraction = length > 0 ? Math.min(1, distance / length) : 0;
+                    return target.set(a.x + (b.x - a.x) * fraction, 0, a.z + (b.z - a.z) * fraction);
+                }
+                distance -= length;
+            }
+        }
         const span = Math.min(0.3, 18 / Math.max(1, this.horizontalLength));
         const start = !!this.startNormal && t < span;
         const end = !!this.endNormal && t > 1 - span;
@@ -321,6 +335,13 @@ export class RoadProfile {
             height = THREE.MathUtils.lerp(height, end.height + Math.max(0, along) * grade, blend);
             slopeX = THREE.MathUtils.lerp(slopeX, normal.z * direction * grade, blend);
             slopeZ = THREE.MathUtils.lerp(slopeZ, -normal.x * direction * grade, blend);
+        }
+        if (this.input.highway === "steps" && best) {
+            const rise = best.b.height - best.a.height;
+            const run = Math.hypot(best.b.x - best.a.x, best.b.z - best.a.z);
+            const count = Math.max(1, Math.ceil(Math.abs(rise) / 0.17), Math.round(run / 0.32));
+            height = best.a.height + rise * Math.min(count, Math.floor(along * count + 1e-8)) / count;
+            slopeX = slopeZ = 0;
         }
         const surface = this.input.surface;
         const grip = ["gravel", "dirt", "ground", "sand"].includes(surface)
