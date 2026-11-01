@@ -100,3 +100,29 @@ coastline ways within 3 km of the selected coastline set. Export a map region th
 includes the entire drivable area; a buffer cannot repair disconnected or invalid
 source mapping. Inland lake/river polygons and their island holes remain separate
 from sea coastlines, including Lake Malaren's mapped elevation.
+
+## Water excavation and vehicle contact
+
+Water polygons now excavate the **vehicle terrain contact** as well as the visible
+terrain mesh. Previously the rendered canal could be empty while the car still
+rested on the original HGT/TIFF elevation, creating an invisible driving surface.
+
+[SceneManager.getRoadState](../src/core/scene/SceneManager.ts) first resolves actual
+road and rail contacts. If there is no structural floor, the water generator
+checks the existing polygon index at that horizontal position and lowers the
+terrain support to at most three metres below the resolved water height. Slopes
+are zeroed when this fallback is lowered; already deeper terrain is retained.
+This depth is a gameplay fallback, not surveyed canal bathymetry. The source
+elevation raster and generated land heights outside water remain unchanged.
+
+Road decks, bridges, selected rail floors and tunnels keep their own collision
+surface through their contact identifier. Polygon holes retain land/island
+support. Vehicles therefore fall under normal gravity when leaving a quay into
+open water, rather than hovering on the old elevation surface. The existing
+water-contact reset still requires touching/crossing the water surface; merely
+being above or below water does not trigger a reset.
+
+Temporary validation used the actual Car update loop with a stub visual model:
+a car above the canal fell 1.22625 m in 0.5 s and subsequently touched the water.
+Checks also preserved dry land, island holes, deeper terrain, surface roads,
+bridge decks, rail decks and tunnel floors. A car on a bridge retained support.

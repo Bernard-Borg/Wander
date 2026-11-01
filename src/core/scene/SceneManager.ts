@@ -755,7 +755,9 @@ export class SceneManager {
      * @param y - Local elevation in metres.
      */
     getRoadState(x: number, z: number, y: number) {
-        return this.railway.contact(x, z, y, this.roadGenerator.getRoadState(x, z, y));
+        const contact = this.railway.contact(x, z, y, this.roadGenerator.getRoadState(x, z, y));
+        // Water removes bare terrain support, never an actual road, rail deck or tunnel floor.
+        return contact.roadId ? contact : this.water.excavateGround(x, z, contact);
     }
 
     /**

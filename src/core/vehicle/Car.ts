@@ -226,6 +226,8 @@ export class Car {
             const red = new THREE.PointLight(0xff1608, 2.5, 3, 2);
             red.name = "Vehicle rear light";
             red.position.copy(tail).add(new THREE.Vector3(0, 0, -0.1));
+            beam.userData.enabledIntensity = beam.intensity;
+            red.userData.enabledIntensity = red.intensity;
             this.vehicleLights.push(beam, red);
             this.nightLights.add(beam, beam.target, red);
         }
@@ -242,7 +244,11 @@ export class Car {
     /** Sets front and rear lamps; time-of-day changes reset any manual override. */
     setNightLighting(enabled: boolean): void {
         this.nightLighting = enabled;
-        this.nightLights.visible = enabled;
+        // Keep light counts stable: hiding this group recompiles every lit city material.
+        this.nightLights.visible = true;
+        for (const light of this.vehicleLights) light.intensity = enabled ? light.userData.enabledIntensity : 0;
+        for (const object of this.nightLights.children)
+            if (object.name === "Headlight beam haze") object.visible = enabled;
         for (const lamp of this.lampMaterials) {
             lamp.material.emissive.copy(lamp.color);
             lamp.material.emissiveIntensity = lamp.intensity;

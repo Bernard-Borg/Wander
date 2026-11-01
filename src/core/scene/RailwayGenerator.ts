@@ -180,7 +180,7 @@ export class RailwayGenerator {
             const height = base + (Math.abs(distance - path.gauge / 2) < 0.13 ? 0.18 : distance <= path.gauge / 2 + 0.9 ? 0.06 : -0.16);
             const dx = b.x - a.x, dz = b.z - a.z, rise = b.y - a.y;
             const ceiling = path.kind === "tunnel" ? base + 1.8 + 4.6 * Math.sqrt(Math.max(0, 1 - (distance / 3) ** 2)) : undefined;
-            result = { height, slopeX: rise * dx / (length * length || 1), slopeZ: rise * dz / (length * length || 1), surface: "gravel", grip: 0.85, structure: path.kind, ceiling };
+            result = { height, roadId: path.id, slopeX: rise * dx / (length * length || 1), slopeZ: rise * dz / (length * length || 1), surface: "gravel", grip: 0.85, structure: path.kind, ceiling };
         }
         return result;
     }

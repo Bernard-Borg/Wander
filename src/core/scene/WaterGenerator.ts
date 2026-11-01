@@ -519,6 +519,18 @@ export class WaterGenerator {
                 height = Math.max(height ?? -Infinity, area.height);
         return height;
     }
+    /** Lowers bare-terrain contact under mapped water so gravity can reach the water surface.
+     * This is a gameplay bed depth, not surveyed bathymetry. Structural decks are filtered by the caller.
+     * @param x - Local eastward position in metres.
+     * @param z - Local southward position in metres.
+     * @param ground - Original terrain contact, including any caller-specific metadata.
+     */
+    excavateGround<T extends SurfaceSample>(x: number, z: number, ground: T): T {
+        const water = this.heightAt(x, z);
+        if (water === null || ground.height <= water - 3) return ground;
+        return { ...ground, height: water - 3, slopeX: 0, slopeZ: 0 };
+    }
+
     /**
      * Subtracts mapped water openings from terrain geometry in place.
      *
