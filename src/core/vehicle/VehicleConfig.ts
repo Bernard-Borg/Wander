@@ -213,7 +213,7 @@ export const DEFAULT_VEHICLE: VehicleConfig = {
         yawDamping: 5,
         rollingResistance: 0.15,
         engineResistance: 0.3,
-        drag: 0.162,
+        drag: 0.0025,
     },
     // Approximate the scaled body (4.43 x 1.99 x 1.12 m), with a small side inset.
     collision: { radius: 0.96, halfLength: 1.255, halfHeight: 0.56 },
